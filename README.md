@@ -21,10 +21,12 @@ mmys_api/
 │       ├── cache/clear.js     # POST/GET /api/cache/clear — 清空解析缓存
 │       ├── store.js           # GET /api/store — 存储自检
 │       ├── mogai.js           # GET /api/mogai — TVBox 魔改 API
+│       ├── appcms.js          # GET /api/appcms — 苹果 CMS V10 API
 │       └── get.js             # GET /api/get?key= — TVBox 配置（base58）
 ├── lib/
 │   ├── db.js                  # Turso 客户端（HANA pipeline）+ CRUD + 兜底 + 缓存
 │   ├── base58.js              # Base58 编解码（TVBox 配置）
+│   ├── appcms_format.js       # 苹果 CMS V10 API 格式化
 │   └── catalog_data.js        # 内嵌片库（自动生成，Turso 不可用时兜底）
 ├── app.py                     # Python 本地开发版（单文件，仅标准库）
 ├── tools/
@@ -139,6 +141,7 @@ Makers 控制台 → 项目 → **Direct Upload** → 选择整个文件夹。
 | POST/GET | `/api/cache/clear` | 清空解析缓存（Turso + 内存） |
 | GET | `/api/store` | 存储自检（Turso 连通性、库内片目数） |
 | GET | `/api/mogai` | **TVBox 魔改 API**（片库列表/详情/搜索） |
+| GET | `/api/appcms` | **苹果 CMS V10 API**（完全兼容标准资源搜索 API） |
 | GET | `/api/get?key=xxx` | **TVBox 配置**（base58 编码，TVBox 直连读取） |
 
 ### /api/play 返回模式
@@ -188,6 +191,76 @@ TVBox 会自动读取 base58 解码后的 JSON 配置，包含片库列表和详
 - **详情**: `https://<域名>/api/mogai?ids=<vod_id>`
 - **搜索**: `https://<域名>/api/mogai?wd=<关键字>`
 
+## 🍎 苹果 CMS V10 API 用法
+
+完全兼容苹果 CMS V10 标准资源搜索 API 格式，支持任意支持该格式的 CMS 或播放器。
+
+### 端点
+
+| 参数 | 说明 |
+|---|---|
+| `GET /api/appcms` | 片库列表（分页，默认 page=1, limit=20） |
+| `GET /api/appcms?ids=<vod_id>` | 单片详情 |
+| `GET /api/appcms?wd=<关键字>` | 搜索 |
+| `GET /api/appcms?class_id=<id>` | 按分类筛选 |
+| `GET /api/appcms?categories=1` | 获取分类列表 |
+| `GET /api/appcms?page=&limit=` | 分页参数 |
+
+### 格式说明
+
+**vod_play_from**: 播放源名称，多个用 `###` 分隔
+
+**vod_play_url**: 播放地址
+- 多源用 `###` 分隔
+- 源内多集用 `$$$` 分隔
+- 每集格式：`名称$URL`
+
+示例：
+```
+播放源1第01集$http://example.com/1.m3u8$$$播放源1第02集$http://example.com/2.m3u8###播放源2第01集$http://example.com/3.m3u8
+```
+
+### 示例
+
+```bash
+# 获取片库列表
+curl https://<域名>/api/appcms
+
+# 获取详情
+curl https://<域名>/api/appcms?ids=305048
+
+# 搜索
+curl "https://<域名>/api/appcms?wd=法医"
+
+# 获取分类
+curl "https://<域名>/api/appcms?categories=1"
+```
+
+### 响应示例
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "page": 1,
+  "pagecount": 2,
+  "limit": 20,
+  "total": 2,
+  "list": [
+    {
+      "vod_id": "305048",
+      "vod_name": "为爱正名",
+      "vod_pic": "",
+      "vod_remarks": "",
+      "vod_class": "",
+      "vod_content": "",
+      "vod_play_from": "BBA###bytedance###qq###IMDB###Ksvideo",
+      "vod_play_url": "第01集$https://域名/api/play?...$$$第02集$https://域名/api/play?...###..."
+    }
+  ]
+}
+```
+
 ## ➕ 新增片目
 
 **方式一：运行时导入（推荐，免重新部署）**
@@ -221,7 +294,7 @@ edgeone makers deploy -n mmys-api                # 重新部署
 ## 🧪 冒烟测试
 
 ```bash
-# Node 端（44 项）
+# Node 端（98 项）
 node tools/smoke_test.mjs
 
 # Python 端
