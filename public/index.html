@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mmys_api · 中转 API</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 2rem; max-width: 860px; margin: 0 auto;
+    line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid #8884; padding-bottom: .3rem; }
+  code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: .9rem; }
+  pre { background: #0002; padding: 1rem; border-radius: .5rem; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+  th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #8884; }
+  th { font-weight: 600; }
+  .ok { color: #0a0; }
+  .err { color: #a00; }
+  .status { font-size: .85rem; opacity: .7; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<h1>🐱 mmys_api</h1>
+<p>猫猫影视（maomao）中转 API · 部署在 EdgeOne Makers · Turso 持久化</p>
+
+<div id="status" class="status">检查服务状态中…</div>
+
+<h2>API 端点</h2>
+<table>
+  <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+  <tr><td>GET</td><td><code>/health</code></td><td>存活检查</td></tr>
+  <tr><td>GET</td><td><code>/api/catalog</code></td><td>列出所有片目</td></tr>
+  <tr><td>GET</td><td><code>/api/movie/{id}</code></td><td>片目详情</td></tr>
+  <tr><td>GET</td><td><code>/api/play?movie=&source=&episode=[&redirect=1]</code></td><td><b>中转核心</b>：token → 新鲜直链</td></tr>
+  <tr><td>GET</td><td><code>/api/token?movie=&source=&episode?</code></td><td>调试：查看原始 token</td></tr>
+  <tr><td>POST</td><td><code>/api/add-movie</code></td><td>导入 maomao.php 详情 dump</td></tr>
+  <tr><td>DELETE</td><td><code>/api/movie/{id}</code></td><td>删除片目</td></tr>
+</table>
+
+<h2>快速示例</h2>
+<pre># JSON 返回
+curl "https://YOUR_HOST/api/play?movie=vod-12345&source=BBA&episode=1"
+
+# 302 直链
+curl -L "https://YOUR_HOST/api/play?movie=vod-12345&source=BBA&episode=1&redirect=1"</pre>
+
+<h2>导入片目</h2>
+<pre>curl -X POST "https://YOUR_HOST/api/add-movie" \
+  -H "Content-Type: application/json" \
+  --data-binary @detail.json</pre>
+
+<script>
+  fetch("/health")
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById("status");
+      if (d.status === "ok") {
+        el.innerHTML = `<span class="ok">✓ 服务正常</span> · v${d.version} · ${d.movies} 片 · 缓存 ${d.cache_size} 条`;
+      } else {
+        el.innerHTML = `<span class="err">✗ ${d.error || "未知错误"}</span>`;
+      }
+    })
+    .catch(e => {
+      document.getElementById("status").innerHTML = `<span class="err">✗ ${e}</span>`;
+    });
+</script>
+</body>
+</html>

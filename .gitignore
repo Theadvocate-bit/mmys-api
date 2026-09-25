@@ -4,9 +4,11 @@ __pycache__/
 *.egg-info/
 .env
 
-# Runtime data — keep your catalog out of version control by default.
-# If you want it committed (e.g. private repo, single user), remove the line.
+# Local runtime data (Python dev mode)
 data/catalog.json
+
+# Node
+node_modules/
 
 # OS
 .DS_Store

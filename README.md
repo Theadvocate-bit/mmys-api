@@ -4,7 +4,7 @@
 
 对已收录片目（每部片抓一次详情包即可入库），实现 **选片 → 选源/选集 → 实时调 `parse_api` → JSON / 302 新鲜直链** 的中转能力。
 
-零依赖，Python 3.8+ 标准库即可运行。
+**双形态**：Python 本地开发版（`app.py`，JSON 文件存储）+ EdgeOne Makers 部署版（`edge-functions/`，Turso SQLite 持久化）。两者 API 契约完全一致。
 
 ## 背景
 
@@ -19,7 +19,9 @@
 
 完整抓包分析见 [mmys.md](./mmys.md)。
 
-## 快速开始
+---
+
+## 🟢 快速开始（本地 Python 版）
 
 ```bash
 git clone https://github.com/Theadvocate-bit/mmys_api.git
@@ -47,17 +49,95 @@ curl -X POST http://127.0.0.1:8080/api/add-movie \
   --data-binary @detail.json
 ```
 
-导入后 `data/catalog.json` 会新增一个 movie 记录，包含：
+---
 
-- `vod_id` / `vod_info` 元数据
-- 每个 source 的 `parse_api` / `headers` / `core_params`
-- 每集 token（`episodes` 对象，key 为集数编号）
+## 🔵 EdgeOne Makers 部署（Turso 存储）
+
+部署到 EdgeOne Makers 平台，使用 Turso（libSQL/SQLite）做持久化存储，替代本地 JSON 文件。
+
+### 架构
+
+```
+edge-functions/                    ← 路由层（文件即路由）
+├── health.js                       GET /health
+└── api/
+    ├── catalog.js                  GET /api/catalog
+    ├── movie/[id].js               GET/DELETE /api/movie/:id
+    ├── play.js                     GET /api/play      ← 中转核心
+    ├── token.js                    GET /api/token
+    └── add-movie.js                POST /api/add-movie
+
+lib/
+└── db.js                           ← Turso HTTP 客户端 + 查询 + 详情转换（零 npm 依赖）
+
+public/
+└── index.html                      ← 服务信息页（含实时 /health 状态）
+
+edgeone.json                        ← {"outputDirectory": "./public"}
+schema.sql                          ← SQL schema
+tools/
+├── init_turso.mjs                  ← CLI：对 Turso 实例跑 schema
+├── smoke_test.mjs                  ← Node 单测（纯函数）
+└── import_detail.py                ← Python CLI（同本地版）
+```
+
+### 前置条件
+
+1. **Turso 数据库**：在 [turso.tech](https://turso.tech) 创建一个数据库（免费层够用），获取：
+   - `TURSO_URL`（形如 `https://xxx.turso.io`）
+   - `TURSO_TOKEN`（形如 `turso_xxx`）
+
+2. **初始化 schema**：
+
+   ```bash
+   TURSO_URL=https://xxx.turso.io \
+   TURSO_TOKEN=turso_xxx \
+   node tools/init_turso.mjs
+   ```
+
+3. **EdgeOne Makers 项目**：在 EdgeOne 控制台创建新项目，关联 GitHub 仓库 `Theadvocate-bit/mmys_api`。
+
+4. **设置环境变量**（EdgeOne Makers → 项目设置 → 环境变量）：
+   - `TURSO_URL`
+   - `TURSO_TOKEN`
+
+### 部署
+
+推送代码到 GitHub，EdgeOne Makers 会自动拉取并部署。
+
+### 导入片目（部署后）
+
+```bash
+curl -X POST https://YOUR_HOST/api/add-movie \
+  -H "Content-Type: application/json" \
+  --data-binary @detail.json
+```
+
+### 验证
+
+```bash
+curl https://YOUR_HOST/health
+# → {"status":"ok","version":"0.2.0","movies":0,"cache_size":0}
+
+curl https://YOUR_HOST/api/catalog
+# → {"count":0,"movies":[]}
+```
+
+### 注意事项
+
+- **无 npm 依赖**：`lib/db.js` 直接调用 Turso HTTP API（`POST /v2/turso/stmts`），不需要 `@libsql/client`，避免 Workers 打包问题。
+- **无共享模块**：`edge-functions/` 下每个路由文件自包含（仅从 `lib/db.js` 导入业务函数），符合 EdgeOne Makers 目录扫描规则。
+- **无 `context.next()`**：`edgeone.json` 指定 `outputDirectory: ./public`，平台自动优先路由静态资源。
+- **parse_api 结果缓存**：每个 EdgeOne 实例内 60 秒缓存（`lib/db.js` 的 `_cache` Map），实例长驻所以缓存有效。
+- **schema 自动初始化**：每个路由首次请求会 `CREATE TABLE IF NOT EXISTS`，即使忘了跑 `init_turso.mjs` 也不会报错。
+
+---
 
 ## API 一览
 
 | 方法   | 路径 | 说明 |
 |---|---|---|
-| GET    | `/`                                     | 服务信息 + 路由表 |
+| GET    | `/`                                     | 服务信息 + 路由表（本地版）/ 静态首页（部署版） |
 | GET    | `/health`                               | 存活检查（movie 数、缓存大小） |
 | GET    | `/api/catalog`                          | 列出所有片目（含每源集数） |
 | GET    | `/api/movie/{id}`                       | 某片详情（sources + 每集 token） |
@@ -72,17 +152,48 @@ curl -X POST http://127.0.0.1:8080/api/add-movie \
 
 ```bash
 # JSON 返回（TVBox / 播放器集成用）
-curl "http://127.0.0.1:8080/api/play?movie=vod-12345&source=BBA&episode=1"
+curl "https://YOUR_HOST/api/play?movie=vod-12345&source=BBA&episode=1"
 # → { "code":200, "url":"http://...", "type":"mp4", "movie":"vod-12345",
 #      "source":"BBA", "source_name":"自建1", "episode":1, "core_params":[...] }
 
 # 302 直链（浏览器 / mpv / VLC 直接打开）
-curl -L "http://127.0.0.1:8080/api/play?movie=vod-12345&source=BBA&episode=1&redirect=1"
+curl -L "https://YOUR_HOST/api/play?movie=vod-12345&source=BBA&episode=1&redirect=1"
 ```
 
 明文源（bytedance / qq / mgtv）导入即用；密文源（BBA / IMDB / qsvip / Ksvideo / Ace / seven）直接用详情包下发的 token。
 
+---
+
+## 测试
+
+### 本地单测（Node，无需 Turso）
+
+```bash
+node tools/smoke_test.mjs
+```
+
+覆盖 `buildMovieFromDetail`（详情转换）、`buildParseUrl`（URL 拼接）、`safeJsonParse`（非 JSON 兜底）。
+
+### 冒烟测试（本地 Python 版）
+
+```bash
+bash tools/smoke_test.sh
+```
+
+启动 mock upstream + mock mmys_api，跑 34 条断言。
+
+### Turso 连通性验证
+
+```bash
+TURSO_URL=... TURSO_TOKEN=... node tools/init_turso.mjs
+# 输出 schema 执行结果 + 验证 SQL
+```
+
+---
+
 ## 环境变量
+
+### 本地 Python 版
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
@@ -92,20 +203,14 @@ curl -L "http://127.0.0.1:8080/api/play?movie=vod-12345&source=BBA&episode=1&red
 | `MMYS_TIMEOUT`   | `10`                 | 上游 `parse_api` 超时（秒） |
 | `MMYS_CACHE_TTL` | `60`                 | 解析结果缓存（秒，按 `(parse_api, token)` 为 key） |
 
-## 项目结构
+### EdgeOne Makers 部署版
 
-```
-mmys_api/
-├── app.py                    # 中转 API 主程序（单文件，标准库）
-├── tools/
-│   └── import_detail.py      # 详情包 → 入库 助手
-├── data/
-│   └── .gitkeep              # 数据目录占位（catalog.json 由 .gitignore 排除）
-├── mmys.md                   # 上游抓包分析结论
-├── README.md
-├── LICENSE
-└── .gitignore
-```
+| 变量 | 说明 |
+|---|---|
+| `TURSO_URL`   | Turso 数据库 URL（形如 `https://xxx.turso.io`） |
+| `TURSO_TOKEN` | Turso 认证 token（形如 `turso_xxx`） |
+
+---
 
 ## 数据来源与限制
 
@@ -122,20 +227,18 @@ TVBox 需要 `{"url":"<直链>", "type":"mp4"}` 格式的中转接口。本项�
 // TVBox source-script 里这样写（示意）
 async function parse(ctx) {
   const r = await ctx.request.getJson(
-    `https://<your-deployment>/api/play?movie=${ctx.data.movie}&source=${ctx.data.source}&episode=${ctx.data.episode}`
+    `https://YOUR_HOST/api/play?movie=${ctx.data.movie}&source=${ctx.data.source}&episode=${ctx.data.episode}`
   );
   return { url: r.url, type: r.type === "mp4" ? 0 : 1 };
 }
 ```
 
-具体接入方式取决于 TVBox 版本，此处仅作思路说明。
-
 ## 部署建议
 
 - **本地 / 家用**：`python3 app.py` 直跑，或用 systemd / launchd 拉起。
-- **公网**：前置 nginx / caddy 反代 + HTTPS。上游 `parse_api` 走 http，出向连接需要白名单放行 `202.189.6.83:12991`。
-- **Serverless**：本项目基于 Python 标准库 `http.server`，可包一层 gunicorn 或直接跑在 Fly.io / Railway / Render 的 Python runtime 上；`data/catalog.json` 需要挂持久卷（否则重启丢数据）。
-- **⚠️ 本项目没有认证**。如果部署到公网，请自行加前置鉴权（nginx basic-auth、Cloudflare Access、reverse proxy + Bearer token 等）。
+- **EdgeOne Makers**：推荐生产部署方式。Turso 免费层（9 GB 数据库 + 每月无限读）对中转 API 场景完全够用。
+- **公网**：EdgeOne Makers 自带 HTTPS；如需鉴权，前置 Cloudflare Access 或 reverse proxy + Bearer token。
+- **⚠️ 本项目没有认证**。如果部署到公网，请自行加前置鉴权。
 
 ## 免责
 
