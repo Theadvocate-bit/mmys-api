@@ -19,9 +19,12 @@ mmys_api/
 │       ├── add-movie.js       # POST /api/add-movie — 导入片目
 │       ├── delete/[id].js     # DELETE/POST /api/delete/:id — 删除片目
 │       ├── cache/clear.js     # POST/GET /api/cache/clear — 清空解析缓存
-│       └── store.js           # GET /api/store — 存储自检
+│       ├── store.js           # GET /api/store — 存储自检
+│       ├── mogai.js           # GET /api/mogai — TVBox 魔改 API
+│       └── get.js             # GET /api/get?key= — TVBox 配置（base58）
 ├── lib/
 │   ├── db.js                  # Turso 客户端（HANA pipeline）+ CRUD + 兜底 + 缓存
+│   ├── base58.js              # Base58 编解码（TVBox 配置）
 │   └── catalog_data.js        # 内嵌片库（自动生成，Turso 不可用时兜底）
 ├── app.py                     # Python 本地开发版（单文件，仅标准库）
 ├── tools/
@@ -135,6 +138,8 @@ Makers 控制台 → 项目 → **Direct Upload** → 选择整个文件夹。
 | DELETE/POST | `/api/delete/<id>` | 删除片目 |
 | POST/GET | `/api/cache/clear` | 清空解析缓存（Turso + 内存） |
 | GET | `/api/store` | 存储自检（Turso 连通性、库内片目数） |
+| GET | `/api/mogai` | **TVBox 魔改 API**（片库列表/详情/搜索） |
+| GET | `/api/get?key=xxx` | **TVBox 配置**（base58 编码，TVBox 直连读取） |
 
 ### /api/play 返回模式
 
@@ -154,6 +159,34 @@ vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1"
 # 或 302 直链（播放器 UA 设为 dart）：
 vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1&raw=1"
 ```
+
+## 📺 TVBox 用法
+
+### 方式一：直连配置（推荐）
+
+在 TVBox 中填入以下 URL 作为资源站地址：
+
+```
+https://<域名>/api/get?key=mmysapi
+```
+
+TVBox 会自动读取 base58 解码后的 JSON 配置，包含片库列表和详情接口。
+
+**环境变量配置：**
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `MYS_API_KEY` | `mmysapi` | 访问密钥 |
+| `MYS_CACHE_TIME` | `7200` | 缓存时间（秒） |
+| `MYS_API_NAME` | `mmys_api 资源` | 资源站显示名称 |
+
+### 方式二：手动添加魔改 API
+
+直接添加以下接口：
+
+- **列表**: `https://<域名>/api/mogai`
+- **详情**: `https://<域名>/api/mogai?ids=<vod_id>`
+- **搜索**: `https://<域名>/api/mogai?wd=<关键字>`
 
 ## ➕ 新增片目
 

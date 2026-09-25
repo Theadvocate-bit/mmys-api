@@ -162,6 +162,25 @@ let threw = false;
 try { buildMovieFromDetail({}); } catch { threw = true; }
 assert(threw, "missing vod_info throws");
 
+// --- Base58 ---
+console.log("b58Encode/b58Decode:");
+const { b58Encode, b58Decode } = await import("../lib/base58.js");
+assertEq(b58Encode("hello world"), "StV1DL6CwTryKyV", "hello world");
+assertEq(b58Encode(""), "", "empty string");
+assertEq(b58Encode(new Uint8Array([0])), "1", "single zero byte");
+assertEq(b58Encode(new Uint8Array([0, 0])), "11", "two zero bytes");
+assertEq(b58Encode(new Uint8Array([0, 0, 0])), "111", "three zero bytes");
+let allOne = true;
+for (let b = 0; b < 58; b++) {
+  if (b58Encode(new Uint8Array([b])).length !== 1) { allOne = false; break; }
+}
+assert(allOne, "all 58 byte values encode to 1 char");
+for (const s of ["hello", "TVBox config", "电影天堂资源", JSON.stringify({ a: 1, b: "中文" })]) {
+  const e = b58Encode(s);
+  const d = new TextDecoder().decode(b58Decode(e));
+  assert(d === s, `roundtrip: ${s.substring(0, 20)}`);
+}
+
 // --- Import embedded catalog ---
 console.log("EMBEDDED_CATALOG:");
 const { EMBEDDED_CATALOG } = await import("../lib/catalog_data.js");
