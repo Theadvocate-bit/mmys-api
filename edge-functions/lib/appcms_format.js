@@ -17,13 +17,17 @@ export function vodToAppCms(vod, origin) {
     .join("###");
 
   // vod_play_url: 源用 ### 分隔，源内集用 $$$ 分隔，每集格式 名称$URL
+  //
+  // 优先使用服务器下发的原始集名（BBA: "第01集"，youku: "1"，
+  // qsvip: "01"），缺失时回退到统一 "第XX集"。
   const playUrls = sourceCodes.map((code) => {
     const s = sources[code];
     const episodes = s.episodes || {};
+    const epNames = s.episode_names || {};
     const epKeys = Object.keys(episodes).sort((a, b) => Number(a) - Number(b));
     return epKeys
       .map((ep) => {
-        const epName = `第${pad2(ep)}集`;
+        const epName = epNames[ep] || `第${pad2(ep)}集`;
         const playUrl = `${origin}/api/play?movie=${encodeURIComponent(vod.id)}&source=${encodeURIComponent(code)}&episode=${ep}`;
         return epName + '$' + playUrl;
       })
@@ -41,13 +45,17 @@ export function vodToAppCms(vod, origin) {
     remarks: vod.vod_remarks || "",
     vod_remarks: vod.vod_remarks || "",
     vod_class: vod.vod_class || "",
-    vod_actor: vodInfo.vod_actor || "",
-    vod_director: vodInfo.vod_director || "",
-    vod_area: vodInfo.vod_area || "",
-    vod_year: vodInfo.vod_year || "",
+    vod_actor: vod.vod_actor || vodInfo.vod_actor || "",
+    vod_director: vod.vod_director || vodInfo.vod_director || "",
+    vod_area: vod.vod_area || vodInfo.vod_area || "",
+    vod_lang: vodInfo.vod_lang || "",
+    vod_year: vod.vod_year || vodInfo.vod_year || "",
     vod_time: vodInfo.vod_time || vod.imported_at || "",
+    vod_pubdate: vod.vod_pubdate || vodInfo.vod_pubdate || "",
+    vod_douban_id: vod.vod_douban_id || vodInfo.vod_douban_id || "",
+    vod_douban_score: vod.vod_douban_score || vodInfo.vod_douban_score || "",
     vod_score: vodInfo.vod_score || "",
-    vod_content: vodInfo.vod_content || "",
+    vod_content: vod.vod_content || vodInfo.vod_content || "",
     vod_play_from: playFrom,
     vod_play_url: playUrl,
   };

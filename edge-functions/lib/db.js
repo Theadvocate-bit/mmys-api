@@ -459,8 +459,17 @@ export function buildMovieFromDetail(payload) {
   if (!vodInfo || Object.keys(vodInfo).length === 0)
     throw new Error("payload missing vod_info");
 
+  // vod_url_with_player location varies between dumps:
+  //   • v0 (initial HAR): top-level of data
+  //   • v1 (2026-09-26 HAR): nested inside vod_info
+  // Support both so any freshly captured detail can be imported.
   const sources = {};
-  let raw = p.vod_url_with_player || [];
+  let raw =
+    p.vod_url_with_player ||
+    vodInfo.vod_url_with_player ||
+    (typeof p.vod_info?.vod_url_with_player !== "undefined"
+      ? vodInfo.vod_url_with_player
+      : []);
   if (typeof raw === "string") {
     try {
       raw = JSON.parse(raw);
@@ -477,6 +486,7 @@ export function buildMovieFromDetail(payload) {
       headers: extractHeaders(entry.headers),
       core_params: entry.core_params || [],
       episodes: parseEpisodeUrl(entry.url || ""),
+      episode_names: parseEpisodeNames(entry.url || ""),
     };
   }
 
@@ -484,6 +494,7 @@ export function buildMovieFromDetail(payload) {
   const name = vodInfo.vod_name || p.vod_name || "";
   const id = vodId != null ? `vod-${vodId}` : slugify(name) || "movie";
 
+  // Surface all vod_info fields we can use downstream.
   return {
     id,
     vod_id: vodId,
@@ -491,6 +502,16 @@ export function buildMovieFromDetail(payload) {
     vod_pic: vodInfo.vod_pic || p.vod_pic || "",
     type_id: vodInfo.type_id || p.type_id,
     vod_remarks: vodInfo.vod_remarks || p.vod_remarks || "",
+    vod_class: vodInfo.vod_class || "",
+    vod_content: vodInfo.vod_content || "",
+    vod_actor: vodInfo.vod_actor || "",
+    vod_director: vodInfo.vod_director || "",
+    vod_area: vodInfo.vod_area || "",
+    vod_lang: vodInfo.vod_lang || "",
+    vod_year: vodInfo.vod_year || "",
+    vod_pubdate: vodInfo.vod_pubdate || "",
+    vod_douban_id: vodInfo.vod_douban_id || "",
+    vod_douban_score: vodInfo.vod_douban_score || "",
     vod_info: vodInfo,
     sources,
     imported_at: new Date().toISOString(),
@@ -529,6 +550,27 @@ function parseEpisodeUrl(urlField) {
     episodes[k] = token;
   }
   return episodes;
+}
+
+// Preserves the original episode name string from each `name$token#` segment
+// so that downstream formatting (e.g. Apple CMS V10 vod_play_url) can emit
+// the source-native label instead of always forcing "第XX集".
+// BBA:   "第01集$TOKEN#..." → names["1"] = "第01集"
+// youku: "1$URL#..."         → names["1"] = "1"
+// qsvip: "01$TOKEN#..."      → names["1"] = "01"
+function parseEpisodeNames(urlField) {
+  const names = {};
+  for (const pair of urlField.split("#")) {
+    const idx = pair.indexOf("$");
+    if (idx < 0) continue;
+    const name = pair.slice(0, idx).trim();
+    const token = pair.slice(idx + 1).trim();
+    if (!token) continue;
+    const m = /(\d+)/.exec(name);
+    const k = m ? String(parseInt(m[1], 10)) : "0";
+    if (name) names[k] = name;
+  }
+  return names;
 }
 
 function slugify(s) {

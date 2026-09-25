@@ -1,6 +1,7 @@
 # mmys（猫猫影视）App 抓包分析结论
 
 > 分析日期：2026-09-26 ｜ 依据：4 份 HAR 抓包文件（media/ 目录）
+> 最新 HAR：`23.225.47.20_2026_09_26_03_54_26.har`（60 entries），发现密钥轮转 + 详情响应结构变更。
 
 ## 一、App 基本信息
 
@@ -91,13 +92,76 @@ App 本地不做任何加密生成，只负责转发调用。
 1. **maomao.php 请求体重放失效**（实测）：带齐全部特征头重放，服务器统一回退
    "0x…"配置式响应（尾部含 **`appsecretkey168`** 字样 = 服务器下发的密钥线索）。
    → 想给任意 vod_id 发列表/详情请求，必须逆向 APK 拿请求加密算法。
+   → **2026-09-26 补充**：新 HAR 抓到密钥升级为 **`appsecretkey192`**（`xddsappsecretkey192` 变体），
+     证实密钥随 App 版本轮转，不能硬编码。
 2. 密文 token 本身长期有效（服务器下发、非 App 生成），新增片目可"抓一次详情包收一部"。
 3. 直链 CDN（bytetos/抖音）从分析服务器拉流 SSL 握手超时，属网络环境差异，不影响解析。
 4. 其余流量均为埋点（友盟三件套 + App 自建 logs），无利用价值。
 
-## 八、后续路线
+## 八、2026-09-26 新 HAR 关键发现（`23.225.47.20_2026_09_26_03_54_26.har`）
+
+### 1. 详情响应结构变更（**关键**）
+
+早期存档把 `vod_url_with_player` 放在 `data` 顶层；本次 HAR 挪入 `data.vod_info` 内部。
+顶层 `data` 也新增了用户态字段：
+
+```js
+data: {
+  vod_info: {
+    vod_id, vod_name, ...元数据...,
+    vod_url_with_player: [   // ← 挪进来了
+      { name, code, url, parse_api, headers, core_params, parse_secret }, ...
+    ]
+  },
+  vod_history: null,
+  is_collect: 0,
+  comment_count: 0,
+}
+```
+
+`buildMovieFromDetail` 已同时支持两种位置（v0 顶层 / v1 vod_info 内）。
+
+### 2. 新增片目 vod 19067 师兄太稳健（30 集 10 源）
+
+新增源代码：`youku`、`qiyi`、`qingshan`。总 10 源：
+```
+BBA / bytedance / youku / qiyi / seven / Ace / qsvip / qingshan / IMDB / Ksvideo
+```
+
+集名字面因源而异（新代码保留字面到 `episode_names`，Apple CMS V10 直出）：
+
+| 源 | 集名字面示例 |
+|---|---|
+| BBA / mgtv / Ksvideo / Ace | `第01集$…` |
+| youku / qiyi / seven / IMDB | `1$…` |
+| qsvip | `01$…` |
+
+### 3. 请求加密密钥轮转
+
+新 HAR 抓到 `appsecretkey192`（`xddsappsecretkey192` 变体）。之前分析存档的是 `appsecretkey168`。
+→ 密钥随 App 版本轮转，反代时不能硬编码；`mmys.app` IOS 版上架后可能进一步升级。
+
+### 4. 新发现的端点
+
+除 `视频列表 / 视频详情 / 弹幕列表` 外，本次还抓到：
+
+| 消息类型 | 内容 |
+|---|---|
+| `置顶公告` | `{title, intro, create_time, is_top, content}` |
+| `首页推荐` | `{banners[], videos[{name, type_id, vlist[]}]}` |
+| `导航列表` | `[{type_id, type_name, type_extend{class,area,lang,year,star,director,state,version}}]` |
+
+`导航列表` 提供了每个 type_id 的筛选字典（地区 / 语言 / 年份 / 演员 / 导演 / 状态 / 版本），
+可以直接用来构建前端分类筛选 UI。
+
+### 5. 请求头补充
+
+新增观察到的请求头：`build-time: 1790064506061`、`platform-version: TKQ1.220829.002 test-keys`
+（Android 测试版）。之前已知的 `pk-id / version / version-number / platform` 均一致。
+
+## 九、后续路线
 
 - **路线 A（可用状态）**：中转 API —— 对已收录片目实现：选片 → 选源/选集 → 实时调 parse_api → 302 新鲜直链。明文源（抖音VID/腾讯/芒果）无需任何密文。每抓一次详情包可新增一部片。
-- **路线 B（完全体）**：提供 APK → jadx 全局搜 `appsecretkey168` / `Ace_Top` / `bt.php` 定位请求加密逻辑 → 伪造任意列表/详情/搜索请求 → 全库任意播放 + 可封装成 TVBox 源。
+- **路线 B（完全体）**：提供 APK → jadx 全局搜 `appsecretkey168` / `appsecretkey192` / `Ace_Top` / `bt.php` 定位请求加密逻辑 → 伪造任意列表/详情/搜索请求 → 全库任意播放 + 可封装成 TVBox 源。
 
 > 仅供个人学习研究抓包分析技术，使用时请注意相关平台的服务条款与版权边界。

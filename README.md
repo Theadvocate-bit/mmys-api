@@ -27,7 +27,8 @@ mmys_api/
 │       └── catalog_data.js    # 内嵌片库（Turso 不可用时兜底）
 ├── tools/
 │   ├── init_turso.mjs         # Turso 建表（HANA pipeline）
-│   └── smoke_test.mjs         # Node 冒烟测试（87 项）
+│   ├── build_catalog_data.py  # 从 data/catalog.json 生成内嵌片库
+│   └── smoke_test.mjs         # Node 冒烟测试（104 项）
 ├── data/catalog.json          # 片库源数据（本地维护，git-ignored）
 ├── public/index.html          # 首页（部署后轮询 /health）
 ├── schema.sql                 # Turso 表结构
@@ -87,7 +88,7 @@ node tools/init_turso.mjs
 
 ```bash
 # 不设 TURSO 环境变量 → 自动使用内嵌 catalog_data.js 兜底
-node tools/smoke_test.mjs             # 87 项冒烟测试
+node tools/smoke_test.mjs             # 104 项冒烟测试
 ```
 
 ## 🚀 部署（EdgeOne Makers 三选一）
@@ -254,7 +255,48 @@ node tools/smoke_test.mjs        # 87 项
 ## ⚠️ 注意事项
 
 - **函数执行时长**：`/api/play` 经函数代理拉流，长视频如遇平台时长限制，用 `?raw=1`（302 直链，不经函数，需播放器 UA 设为 `dart`）
-- **内嵌片库**：`edge-functions/lib/catalog_data.js` 是代码兜底；内含 2 部片目（305048 为爱正名、308179 法医秦明之龙番往事）共 135 集
+- **内嵌片库**：`edge-functions/lib/catalog_data.js` 是代码兜底；内含 3 部片目（305048 为爱正名、308179 法医秦明之龙番往事、19067 师兄太稳健）共 434 集
 - **本项目无认证**：公网部署需自行加前置（nginx / Cloudflare Access / reverse proxy Bearer）
-- 片库规模 = 已导入详情包的片目数；全库任意搜索/详情需逆向 App 请求加密（线索 `appsecretkey168`，见 mmys.md 路线 B）
+- 片库规模 = 已导入详情包的片目数；全库任意搜索/详情需逆向 App 请求加密（线索 `appsecretkey168` / `appsecretkey192`，见 mmys.md 路线 B）
 - 本项目仅限个人学习研究抓包/反代技术，请遵守相关平台服务条款与版权边界
+
+## 🆕 2026-09-26 抓包新发现
+
+依据 `23.225.47.20_2026_09_26_03_54_26.har`（60 entries）：
+
+**请求体加密密钥升级**：早期存档 `appsecretkey168`；本次在 `logs` 响应尾部抓到 `appsecretkey192`（`xddsappsecretkey192` 变体）。密钥随 App 版本轮转，逆向时要动态定位。
+
+**详情响应结构变更**（旧 HAR 顶层 → 新 HAR 挪入 `vod_info` 内部）：
+```js
+// 旧（v0）：
+data: { vod_info: {...}, vod_url_with_player: [...] }
+// 新（v1，2026-09-26）：
+data: { vod_info: { ..., vod_url_with_player: [...] }, vod_history, is_collect, comment_count }
+```
+`buildMovieFromDetail` 已兼容两种位置。
+
+**新增片目 vod 19067 师兄太稳健**（10 源 × 30 集 = 299 集）：
+- 新增源代码：`youku`（纯享3）、`qiyi`（纯享4）、`qingshan`（自建6）
+- 全部 10 源：`BBA / bytedance / youku / qiyi / seven / Ace / qsvip / qingshan / IMDB / Ksvideo`
+
+**集名格式因源而异**（新增保真）：
+| 源 | 集名字面 |
+|---|---|
+| BBA | `第01集$…` |
+| youku / qiyi / seven / IMDB | `1$…` |
+| qsvip | `01$…` |
+
+`parseEpisodeNames()` 保留原始字面，Apple CMS V10 `vod_play_url` 直出服务器格式。
+
+**发现的其它 API**（本次 HAR 内出现，未做接口透出）：
+| 端点消息 | 用途 | 数据结构 |
+|---|---|---|
+| `视频列表` | 分页列表 | `page / pagecount / total / limit / data[]` |
+| `视频详情` | 详情 | `vod_info + vod_history + is_collect + comment_count` |
+| `弹幕列表` | 弹幕 | 数组（本次为空） |
+| `置顶公告` | 公告 | `title / intro / create_time / is_top` |
+| `首页推荐` | Banner + 分区 | `banners[] + videos[].vlist[]` |
+| `导航列表` | 分类筛选 | `type_id / type_name / type_extend{class,area,lang,year,star,director,state,version}` |
+
+请求头（Flutter/Dart）：`pk-id: com.maomao.app / version: 1.0.1 / version-number: 2 / build-time: 1790064506061 / platform: android / platform-version: TKQ1.220829.002 test-keys`。
+

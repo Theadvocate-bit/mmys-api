@@ -160,6 +160,50 @@ let threw = false;
 try { buildMovieFromDetail({}); } catch { threw = true; }
 assert(threw, "missing vod_info throws");
 
+// New HAR format: vod_url_with_player nested inside vod_info (2026-09-26 HAR)
+const nestedSources = {
+  data: {
+    vod_id: 19067,
+    vod_info: {
+      vod_id: 19067,
+      vod_name: "师兄太稳健",
+      vod_pic: "http://pic.jpg",
+      vod_remarks: "30集全",
+      vod_class: "奇幻,古装,电视,连续",
+      vod_url_with_player: [
+        {
+          code: "BBA",
+          name: "自建1",
+          parse_api: "http://202.189.6.83:12991/xx/bt.php?url=",
+          url: "第01集$TOKEN1#第02集$TOKEN2",
+        },
+        {
+          code: "youku",
+          name: "纯享3",
+          parse_api: "http://202.189.6.83:12991/xx/gf2.php?url=",
+          url: "1$https://v.youku.com/x.html#2$https://v.youku.com/y.html",
+        },
+        {
+          code: "qsvip",
+          name: "自建4",
+          parse_api: "http://202.189.6.83:12991/xx/xd.php?url=",
+          url: "01$QSVIP1#02$QSVIP2",
+        },
+      ],
+    },
+  },
+};
+const movieN = buildMovieFromDetail(nestedSources);
+assertEq(movieN.id, "vod-19067", "nested source format: id");
+assertEq(movieN.name, "师兄太稳健", "nested source format: name");
+assertEq(Object.keys(movieN.sources).length, 3, "nested source format: 3 sources");
+assert(movieN.sources.BBA.episodes["1"] === "TOKEN1", "BBA nested parse");
+assert(movieN.sources.youku.episodes["1"] === "https://v.youku.com/x.html", "youku nested parse");
+// episode_names preserves source-native labels
+assertEq(movieN.sources.BBA.episode_names["1"], "第01集", "BBA episode name kept");
+assertEq(movieN.sources.youku.episode_names["1"], "1", "youku bare number kept");
+assertEq(movieN.sources.qsvip.episode_names["1"], "01", "qsvip zero-padded kept");
+
 // --- Embedded catalog ---
 // --- Import embedded catalog ---
 console.log("EMBEDDED_CATALOG:");
@@ -167,8 +211,14 @@ const { EMBEDDED_CATALOG } = await import("../edge-functions/lib/catalog_data.js
 assert(Object.keys(EMBEDDED_CATALOG.vods).length >= 2, "embedded catalog has vods");
 assert(EMBEDDED_CATALOG.vods["305048"], "vod 305048 present");
 assert(EMBEDDED_CATALOG.vods["308179"], "vod 308179 present");
+assert(EMBEDDED_CATALOG.vods["19067"], "vod 19067 present (new HAR)");
 assert(EMBEDDED_CATALOG.vods["305048"].id === "vod-305048", "id format vod-${vod_id}");
 assert(Object.keys(EMBEDDED_CATALOG.vods["305048"].sources).length >= 4, "305048 has sources");
+assert(Object.keys(EMBEDDED_CATALOG.vods["19067"].sources).length === 10, "19067 has 10 sources");
+assert(EMBEDDED_CATALOG.vods["19067"].sources.youku, "19067 youku source (new)");
+assert(EMBEDDED_CATALOG.vods["19067"].sources.qiyi, "19067 qiyi source (new)");
+assert(EMBEDDED_CATALOG.vods["19067"].sources.qingshan, "19067 qingshan source (new)");
+assert(EMBEDDED_CATALOG.vods["19067"].sources.BBA.episode_names["1"] === "第01集", "19067 BBA episode name preserved");
 
 // --- AppCMS V10 Format ---
 console.log("AppCMS V10 Format:");
@@ -337,6 +387,15 @@ assertEq(sourceCount, playFromCount, "source count matches play_from count");
 
 const playUrlSources = realCms.vod_play_url.split("###").length;
 assertEq(sourceCount, playUrlSources, "source count matches play_url source count");
+
+// Episode names are preserved from source (第01集, 1, 01) when available
+const vod19067 = EMBEDDED_CATALOG.vods["19067"];
+const cms19067 = vodToAppCms(vod19067, origin);
+assert(cms19067.vod_play_url.includes("第01集$"), "19067 BBA emits source-native 第01集");
+assert(cms19067.vod_play_from.split("###").length === 10, "19067 has 10 sources in play_from");
+// Check that youku bare-number name survives to output
+const youkuSlice = cms19067.vod_play_url.split("###")[2]; // youku is 3rd source
+assert(/^1\$/.test(youkuSlice), "19067 youku uses bare '1' name from HAR");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);
