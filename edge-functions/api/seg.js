@@ -2,7 +2,7 @@
 // Media proxy: fetch upstream with Range passthrough, force dart UA, stream back.
 // Used by /api/play for mp4/direct links and m3u8 segment rewriting.
 
-import { getConfig, b64uDec } from "../../../lib/db.js";
+import { getConfig, b64uDec } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

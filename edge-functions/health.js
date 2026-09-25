@@ -1,5 +1,5 @@
 // edge-functions/health.js — GET /health
-import { getDb, storeStatus, cacheSize, VERSION } from "../../lib/db.js";
+import { getDb, storeStatus, cacheSize, VERSION } from "./lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

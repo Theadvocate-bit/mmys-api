@@ -13,12 +13,12 @@
 //   vod_play_from: 源名称用 ### 分隔
 //   vod_play_url:  源用 ### 分隔，源内集用 $$$ 分隔，每集格式 名称$URL
 
-import { getDb, getAllMovies, getMovie } from "../../../lib/db.js";
+import { getDb, getAllMovies, getMovie } from "../lib/db.js";
 import {
   vodToAppCms,
   filterByClass,
   getAllCategories,
-} from "../../../lib/appcms_format.js";
+} from "../lib/appcms_format.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

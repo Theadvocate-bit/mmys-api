@@ -1,5 +1,5 @@
 // edge-functions/api/catalog.js — GET /api/catalog
-import { getDb, getAllMovies } from "../../../lib/db.js";
+import { getDb, getAllMovies } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

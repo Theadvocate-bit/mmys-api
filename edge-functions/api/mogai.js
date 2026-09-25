@@ -5,7 +5,7 @@
 //   GET /api/mogai?ids=305048   → 单片详情
 //   GET /api/mogai?wd=关键字     → 搜索
 
-import { getDb, getAllMovies, getMovie } from "../../../lib/db.js";
+import { getDb, getAllMovies, getMovie } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

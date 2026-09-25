@@ -1,6 +1,6 @@
 // edge-functions/api/add-movie.js — POST /api/add-movie
 // Import a maomao.php detail dump into Turso (or in-memory overlay if Turso is down).
-import { getDb, upsertMovie, buildMovieFromDetail } from "../../../lib/db.js";
+import { getDb, upsertMovie, buildMovieFromDetail } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

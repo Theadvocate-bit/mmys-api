@@ -1,5 +1,5 @@
 // edge-functions/api/movie/[id].js — GET/DELETE /api/movie/:id
-import { getDb, getMovie, deleteMovie } from "../../../../lib/db.js";
+import { getDb, getMovie, deleteMovie } from "../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

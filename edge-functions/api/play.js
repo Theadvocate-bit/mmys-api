@@ -22,7 +22,7 @@ import {
   decompressIfGzip,
   decodeUtf8,
   b64u,
-} from "../../../lib/db.js";
+} from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

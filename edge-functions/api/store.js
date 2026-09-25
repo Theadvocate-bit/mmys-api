@@ -1,5 +1,5 @@
 // edge-functions/api/store.js — GET /api/store (storage health check)
-import { getDb, storeStatus } from "../../../lib/db.js";
+import { getDb, storeStatus } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

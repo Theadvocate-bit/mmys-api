@@ -10,8 +10,8 @@
 //   MYS_CACHE_TIME — 缓存时间（秒，默认 7200）
 //   MYS_API_NAME  — 资源站名称（默认 "mmys_api 资源"）
 
-import { getDb, getAllMovies } from "../../../lib/db.js";
-import { b58Encode } from "../../../lib/base58.js";
+import { getDb, getAllMovies } from "../lib/db.js";
+import { b58Encode } from "../lib/base58.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

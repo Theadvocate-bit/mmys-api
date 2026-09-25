@@ -1,5 +1,5 @@
 // edge-functions/api/search.js — GET /api/search?q=keyword
-import { getDb, getAllMovies } from "../../../lib/db.js";
+import { getDb, getAllMovies } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

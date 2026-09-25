@@ -1,5 +1,5 @@
 // edge-functions/api/token.js — GET /api/token (debug: return raw token)
-import { getDb, getMovie } from "../../../lib/db.js";
+import { getDb, getMovie } from "../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

@@ -1,6 +1,6 @@
 // edge-functions/api/cache/clear.js — POST/GET /api/cache/clear
 // Clear parse_api result cache (Turso + in-memory).
-import { getDb, parseCacheClear } from "../../../../lib/db.js";
+import { getDb, parseCacheClear } from "../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

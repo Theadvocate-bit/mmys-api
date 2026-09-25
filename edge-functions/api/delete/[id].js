@@ -1,6 +1,6 @@
 // edge-functions/api/delete/[id].js — DELETE/POST /api/delete/:id
 // Delete a movie from Turso (and in-memory overlay).
-import { getDb, deleteMovie } from "../../../../lib/db.js";
+import { getDb, deleteMovie } from "../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
