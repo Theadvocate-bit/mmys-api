@@ -1,9 +1,9 @@
-// edge-functions/api/movie/[id].js — GET /api/movie/:id  +  DELETE /api/movie/:id
-import { getDb, ensureSchema, getMovie, deleteMovie } from "../../../../lib/db.js";
+// edge-functions/api/movie/[id].js — GET/DELETE /api/movie/:id
+import { getDb, getMovie, deleteMovie } from "../../../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
@@ -11,15 +11,33 @@ export async function onRequest(context) {
   const { request, env, params } = context;
   const id = params.id;
 
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+
   if (request.method === "GET") {
     try {
-      const db = getDb(env);
-      if (db.error) return json({ error: db.error }, 500);
-      await ensureSchema(db);
-
-      const movie = await getMovie(db, id);
+      const movie = await getMovie(env, id);
       if (!movie) return json({ error: `movie '${id}' not found` }, 404);
-      return json({ movie });
+
+      // Build absolute play URLs
+      const origin = new URL(request.url).origin;
+      const data = {
+        id: movie.id,
+        vod_id: movie.vod_id,
+        name: movie.name,
+        vod_pic: movie.vod_pic,
+        vod_remarks: movie.vod_remarks,
+        vod_info: movie.vod_info,
+        sources: Object.entries(movie.sources || {}).map(([code, s]) => {
+          const eps = Object.entries(s.episodes || {}).map(([ep, _token]) => ({
+            episode: parseInt(ep, 10),
+            play_url: `${origin}/api/play?movie=${encodeURIComponent(id)}&source=${encodeURIComponent(code)}&episode=${ep}`,
+          }));
+          return { code, name: s.name, episodes: eps };
+        }),
+      };
+      return json({ data });
     } catch (e) {
       return json({ error: e.message }, 500);
     }
@@ -27,13 +45,8 @@ export async function onRequest(context) {
 
   if (request.method === "DELETE") {
     try {
-      const db = getDb(env);
-      if (db.error) return json({ error: db.error }, 500);
-      await ensureSchema(db);
-
-      const ok = await deleteMovie(db, id);
-      if (!ok) return json({ error: `movie '${id}' not found` }, 404);
-      return json({ success: true, id });
+      const persisted = await deleteMovie(env, id);
+      return json({ success: true, id, persisted });
     } catch (e) {
       return json({ error: e.message }, 500);
     }

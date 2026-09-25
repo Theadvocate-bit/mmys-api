@@ -1,27 +1,23 @@
 // edge-functions/api/add-movie.js — POST /api/add-movie
-// Import a maomao.php detail dump into Turso.
-import {
-  getDb,
-  ensureSchema,
-  upsertMovie,
-  buildMovieFromDetail,
-} from "../../../lib/db.js";
+// Import a maomao.php detail dump into Turso (or in-memory overlay if Turso is down).
+import { getDb, upsertMovie, buildMovieFromDetail } from "../../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 export async function onRequest(context) {
   const { request, env } = context;
-  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+  if (request.method !== "POST") {
+    return json({ error: "method not allowed" }, 405);
+  }
 
   try {
-    const db = getDb(env);
-    if (db.error) return json({ error: db.error }, 500);
-    await ensureSchema(db);
-
     let payload;
     try {
       payload = await request.json();
@@ -29,14 +25,25 @@ export async function onRequest(context) {
       return json({ error: "invalid JSON body" }, 400);
     }
 
-    // Allow an optional `--as` style override via the body: { _as: "my-slug", ...detail }
+    // Support nested payloads: {data: {vod_info, ...}} or {vod_info, ...}
+    let info = payload;
+    if (payload && payload.data && payload.data.vod_info) info = payload.data;
+    else if (payload && payload.vod_info) info = payload;
+
+    const movie = buildMovieFromDetail(info);
     const overrideSlug = typeof payload._as === "string" ? payload._as : null;
-
-    const movie = buildMovieFromDetail(payload);
     if (overrideSlug) movie.id = overrideSlug;
-    await upsertMovie(db, movie);
 
-    return json({ success: true, movie }, 201);
+    const { persisted, note } = await upsertMovie(env, movie);
+    return json(
+      {
+        success: true,
+        persisted,
+        note,
+        movie: { id: movie.id, name: movie.name, vod_id: movie.vod_id },
+      },
+      201
+    );
   } catch (e) {
     return json({ error: e.message }, 400);
   }

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// tools/init_turso.mjs — Run the schema against a real Turso instance.
+// tools/init_turso.mjs — Initialize Turso schema via HANA pipeline protocol.
 //
 // Usage:
-//   TURSO_URL=https://xxx.turso.io TURSO_TOKEN=turso_xxx node tools/init_turso.mjs
-//
-// Reads schema.sql, splits on ';', and executes each statement via Turso HTTP API.
+//   TURSO_DATABASE_URL=https://xxx.turso.io TURSO_AUTH_TOKEN=turso_xxx node tools/init_turso.mjs
+//   (also accepts TURSO_URL / TURSO_TOKEN for backwards compat)
 
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -13,13 +12,20 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = resolve(__dirname, "../schema.sql");
 
-const url = (process.env.TURSO_URL || "").trim().replace(/\/$/, "");
-const token = (process.env.TURSO_TOKEN || "").trim();
+let url = (process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || "").trim();
+const token = (process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || "").trim();
 
 if (!url || !token) {
-  console.error("ERROR: set TURSO_URL and TURSO_TOKEN env vars");
+  console.error(
+    "ERROR: set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (or TURSO_URL + TURSO_TOKEN)"
+  );
   process.exit(1);
 }
+
+// Auto-convert libsql:// or turso:// to https://
+if (url.startsWith("libsql://")) url = "https://" + url.slice(9);
+else if (url.startsWith("turso://")) url = "https://" + url.slice(8);
+url = url.replace(/\/$/, "");
 
 const schema = readFileSync(SCHEMA_PATH, "utf-8");
 const statements = schema
@@ -28,29 +34,53 @@ const statements = schema
   .filter(Boolean);
 
 console.log(`Connecting to ${url}`);
-console.log(`Executing ${statements.length} statement(s)…`);
+console.log(`Executing ${statements.length} statement(s) via HANA pipeline…\n`);
 
-for (const sql of statements) {
-  const res = await fetch(`${url}/v2/turso/stmts`, {
+async function execute(sql) {
+  const payload = JSON.stringify({
+    requests: [{ type: "execute", stmt: { sql } }, { type: "close" }],
+  });
+  const res = await fetch(`${url}/v2/pipeline`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "text/plain",
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify([{ sql }]),
+    body: payload,
   });
-
   if (!res.ok) {
     const text = await res.text();
-    console.error(`  FAIL [${res.status}]: ${text.slice(0, 200)}`);
-    process.exit(1);
+    throw new Error(`Turso HTTP ${res.status}: ${text.slice(0, 300)}`);
   }
-
-  const data = await res.json();
-  const stmt = data.statements?.[0];
-  console.log(`  ✓ ${sql.slice(0, 60)}${sql.length > 60 ? "…" : ""}`);
-  if (stmt.changes > 0) console.log(`    (changes: ${stmt.changes})`);
+  const d = await res.json();
+  const r0 = d.results?.[0];
+  if (r0?.type === "error") {
+    throw new Error(`Turso error: ${JSON.stringify(r0.error)}`);
+  }
+  return r0?.response?.result;
 }
 
-console.log("\nSchema initialized. Verify:");
-console.log(`  curl -s -H "Authorization: Bearer ${token}" \\\n    "${url}/v2/turso/stmts" -d '[{"sql":"SELECT name FROM sqlite_master WHERE type=\"table\""}]'`);
+for (const sql of statements) {
+  try {
+    const r = await execute(sql);
+    console.log(`  ✓ ${sql.slice(0, 60)}${sql.length > 60 ? "…" : ""}`);
+    if (r && r.affected_row_count > 0)
+      console.log(`    (changes: ${r.affected_row_count})`);
+  } catch (e) {
+    console.error(`  FAIL: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+console.log(`\nSchema initialized.`);
+console.log(`\nVerify:`);
+console.log(
+  `  curl -s -H "Authorization: Bearer ${token}" \\`
+);
+console.log(
+  `    -H "Content-Type: application/json" \\`
+);
+console.log(`    "${url}/v2/pipeline" \\`);
+console.log(
+  `    -d '{"requests":[{"type":"execute","stmt":{"sql":"SELECT name FROM sqlite_master WHERE type=\\"table\\""}},{"type":"close"}]}'`
+);

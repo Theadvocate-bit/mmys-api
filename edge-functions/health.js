@@ -1,29 +1,36 @@
 // edge-functions/health.js — GET /health
-import { getDb, ensureSchema, countMovies, cacheSize, VERSION } from "../../lib/db.js";
+import { getDb, storeStatus, cacheSize, VERSION } from "../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 export async function onRequest(context) {
   const { request, env } = context;
-  if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+  if (request.method !== "GET") {
+    return json({ error: "method not allowed" }, 405);
+  }
 
   try {
-    const db = getDb(env);
-    if (db.error) return json({ error: db.error }, 500);
-    await ensureSchema(db);
-    const movies = await countMovies(db);
+    const store = await storeStatus(env);
     return json({
       status: "ok",
       version: VERSION,
-      movies,
+      movies: store.movies_in_db || 0,
+      turso: store.turso,
       cache_size: cacheSize(),
+      ...store,
     });
   } catch (e) {
-    return json({ error: e.message }, 500);
+    return json(
+      { status: "error", version: VERSION, error: e.message },
+      500
+    );
   }
 }
 

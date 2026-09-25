@@ -1,16 +1,20 @@
-// edge-functions/api/token.js — GET /api/token
-// Debug: return raw token for (movie, source, episode) without calling parse_api.
-import { getDb, ensureSchema, getMovie } from "../../../lib/db.js";
+// edge-functions/api/token.js — GET /api/token (debug: return raw token)
+import { getDb, getMovie } from "../../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 export async function onRequest(context) {
   const { request, env } = context;
-  if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+  if (request.method !== "GET") {
+    return json({ error: "method not allowed" }, 405);
+  }
 
   const url = new URL(request.url);
   const movieId = url.searchParams.get("movie") || "";
@@ -22,31 +26,31 @@ export async function onRequest(context) {
   }
 
   const episode = parseInt(epStr, 10);
-  if (isNaN(episode) || episode < 0) {
-    return json({ error: "episode must be non-negative integer" }, 400);
+  if (isNaN(episode) || episode < 1) {
+    return json({ error: "episode must be positive integer" }, 400);
   }
 
   try {
-    const db = getDb(env);
-    if (db.error) return json({ error: db.error }, 500);
-    await ensureSchema(db);
-
-    const movie = await getMovie(db, movieId);
+    const movie = await getMovie(env, movieId);
     if (!movie) return json({ error: `movie '${movieId}' not found` }, 404);
 
     const source = (movie.sources || {})[sourceCode];
     if (!source) {
       const available = Object.keys(movie.sources || {});
-      return json({
-        error: `source '${sourceCode}' not found; available: ${available.join(", ")}`,
-      }, 404);
+      return json(
+        {
+          error: `source '${sourceCode}' not found; available: ${available.join(", ")}`,
+        },
+        404
+      );
     }
 
     const token = (source.episodes || {})[String(episode)];
     if (!token) {
-      return json({
-        error: `episode ${episode} not in source '${sourceCode}'`,
-      }, 404);
+      return json(
+        { error: `episode ${episode} not in source '${sourceCode}'` },
+        404
+      );
     }
 
     return json({

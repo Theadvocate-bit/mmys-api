@@ -1,4 +1,4 @@
-// edge-functions/api/catalog.js — GET /api/catalog
+// edge-functions/api/search.js — GET /api/search?q=keyword
 import { getDb, getAllMovies } from "../../../lib/db.js";
 
 const CORS = {
@@ -16,22 +16,29 @@ export async function onRequest(context) {
     return json({ error: "method not allowed" }, 405);
   }
 
+  const url = new URL(request.url);
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+
   try {
     const all = await getAllMovies(env);
-    const movies = all.map((m) => ({
-      id: m.id,
-      vod_id: m.vod_id,
-      name: m.name,
-      type_id: m.type_id,
-      vod_pic: m.vod_pic,
-      vod_remarks: m.vod_remarks,
-      sources: Object.entries(m.sources || {}).map(([code, s]) => ({
-        code,
-        name: s.name,
-        episodes: Object.keys(s.episodes || {}).length,
+    const matches = all.filter((m) => {
+      if (!q) return false;
+      return (
+        (m.name || "").toLowerCase().includes(q) ||
+        (m.vod_remarks || "").toLowerCase().includes(q) ||
+        (m.vod_class || "").toLowerCase().includes(q)
+      );
+    });
+    return json({
+      q,
+      total: matches.length,
+      data: matches.map((m) => ({
+        id: m.id,
+        vod_id: m.vod_id,
+        name: m.name,
+        vod_remarks: m.vod_remarks,
       })),
-    }));
-    return json({ count: movies.length, movies });
+    });
   } catch (e) {
     return json({ error: e.message }, 500);
   }

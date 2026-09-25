@@ -1,5 +1,5 @@
-// edge-functions/api/catalog.js — GET /api/catalog
-import { getDb, getAllMovies } from "../../../lib/db.js";
+// edge-functions/api/store.js — GET /api/store (storage health check)
+import { getDb, storeStatus } from "../../../lib/db.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,21 +17,7 @@ export async function onRequest(context) {
   }
 
   try {
-    const all = await getAllMovies(env);
-    const movies = all.map((m) => ({
-      id: m.id,
-      vod_id: m.vod_id,
-      name: m.name,
-      type_id: m.type_id,
-      vod_pic: m.vod_pic,
-      vod_remarks: m.vod_remarks,
-      sources: Object.entries(m.sources || {}).map(([code, s]) => ({
-        code,
-        name: s.name,
-        episodes: Object.keys(s.episodes || {}).length,
-      })),
-    }));
-    return json({ count: movies.length, movies });
+    return json(await storeStatus(env));
   } catch (e) {
     return json({ error: e.message }, 500);
   }
