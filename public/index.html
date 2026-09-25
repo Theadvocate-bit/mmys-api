@@ -5,69 +5,224 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>mmys_api · 中转 API</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light dark; --bg:#0d1117; --card:#161b22; --border:#30363d; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950; --err:#f85149; --warn:#d29922; }
+  html { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    margin: 0; padding: 2rem; max-width: 860px; margin: 0 auto;
-    line-height: 1.6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    margin: 0; padding: 1.5rem 1rem 3rem; max-width: 960px; margin-inline: auto;
+    line-height: 1.65; color: var(--fg); background: var(--bg);
   }
-  h1 { font-size: 1.6rem; }
-  h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid #8884; padding-bottom: .3rem; }
-  code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: .9rem; }
-  pre { background: #0002; padding: 1rem; border-radius: .5rem; overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
-  th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #8884; }
-  th { font-weight: 600; }
-  .ok { color: #0a0; }
-  .err { color: #a00; }
-  .status { font-size: .85rem; opacity: .7; margin-top: .5rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 .8rem; padding-bottom: .35rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1rem; margin: 1.4rem 0 .4rem; color: var(--accent); }
+  p { margin: .5rem 0; }
+  code { font-family: "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace; font-size: .88rem;
+         background: #0006; padding: .12rem .35rem; border-radius: 4px; color: #ffb86c; }
+  pre { background: #000a; padding: 1rem; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border);
+        margin: .6rem 0; }
+  pre code { background: transparent; padding: 0; color: var(--fg); }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .92rem; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); background: #0006; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .sub { color: var(--muted); font-size: .9rem; }
+  .ok { color: var(--ok); }
+  .err { color: var(--err); }
+  .warn { color: var(--warn); }
+  .status { font-size: .85rem; opacity: .85; margin-top: .4rem; }
+  .banner { display: flex; gap: .6rem; flex-wrap: wrap; margin: .8rem 0 .2rem; }
+  .pill { display: inline-flex; align-items: center; gap: .35rem;
+          background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+          padding: .3rem .8rem; font-size: .82rem; color: var(--fg);
+          text-decoration: none; }
+  .pill:hover { border-color: var(--accent); text-decoration: none; }
+  .pill::before { content: "→"; color: var(--accent); }
+  .badge { display: inline-block; padding: .05rem .4rem; border-radius: 4px;
+           font-size: .72rem; font-weight: 600; vertical-align: middle; }
+  .b-get { background: #23863620; color: var(--ok); border: 1px solid #23863660; }
+  .b-post { background: #1f6feb20; color: var(--accent); border: 1px solid #1f6feb60; }
+  .b-del { background: #f8514920; color: var(--err); border: 1px solid #f8514960; }
+  .grid2 { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  details { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: .6rem 1rem; margin: .5rem 0; }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .kbd { display: inline-block; background: #000a; border: 1px solid var(--border); border-radius: 4px;
+         padding: .05rem .4rem; font-family: ui-monospace, monospace; font-size: .85em; }
 </style>
 </head>
 <body>
-<h1>🐱 mmys_api</h1>
-<p>猫猫影视（maomao）中转 API · 部署在 EdgeOne Makers · Turso 持久化</p>
 
+<h1>🐱 mmys_api</h1>
+<p class="sub">猫猫影视（maomao）中转 API · EdgeOne Makers · Turso 持久化</p>
 <div id="status" class="status">检查服务状态中…</div>
 
-<h2>API 端点</h2>
+<h2>🚀 快捷访问 API</h2>
+<p class="sub">下面这些链接就是可直接点击的 API 请求 — 结果就是本页实际返回的 JSON，可复制、可嵌入。</p>
+
+<div class="banner">
+  <a class="pill" href="/api/appcms">片库列表</a>
+  <a class="pill" href="/api/appcms?limit=50">前 50 部</a>
+  <a class="pill" href="/api/appcms?ac=detail&ids=__FIRST_ID__">详情（第一部）</a>
+  <a class="pill" href="/api/catalog">片目元数据</a>
+  <a class="pill" href="/health">健康检查</a>
+</div>
+
+<h2>🍎 苹果 CMS V10 API（主推）</h2>
+<p>严格对齐 <code>/api.php/provide/vod</code> 规范（hongniuzy2 / bfzy / dyttzy 三家标准）。任意支持苹果 CMS V10 的资源采集器、TVBox、CMS 前端可直接消费。</p>
+
+<h3>端点</h3>
 <table>
-  <tr><th>方法</th><th>路径</th><th>说明</th></tr>
-  <tr><td>GET</td><td><code>/health</code></td><td>存活检查</td></tr>
-  <tr><td>GET</td><td><code>/api/catalog</code></td><td>列出所有片目</td></tr>
-  <tr><td>GET</td><td><code>/api/movie/{id}</code></td><td>片目详情</td></tr>
-  <tr><td>GET</td><td><code>/api/play?movie=&source=&episode=[&redirect=1]</code></td><td><b>中转核心</b>：token → 新鲜直链</td></tr>
-  <tr><td>GET</td><td><code>/api/token?movie=&source=&episode?</code></td><td>调试：查看原始 token</td></tr>
-  <tr><td>POST</td><td><code>/api/add-movie</code></td><td>导入 maomao.php 详情 dump</td></tr>
-  <tr><td>DELETE</td><td><code>/api/movie/{id}</code></td><td>删除片目</td></tr>
+  <tr><th>参数</th><th>说明</th></tr>
+  <tr><td><code>GET /api/appcms</code></td><td>精简列表（默认，每项 8 字段）</td></tr>
+  <tr><td><code>GET /api/appcms?ac=detail&ids=&lt;vod_id&gt;</code></td><td>详情模式（每项 83 字段）</td></tr>
+  <tr><td><code>GET /api/appcms?wd=&lt;关键字&gt;</code></td><td>按名称 / 简介 / 分类搜索</td></tr>
+  <tr><td><code>GET /api/appcms?type_id=&lt;id&gt;</code></td><td>按分类过滤（<code>class_id</code> 等价别名）</td></tr>
+  <tr><td><code>GET /api/appcms?page=&lt;n&gt;&amp;limit=&lt;n&gt;</code></td><td>分页（limit 上限 100）</td></tr>
 </table>
 
-<h2>快速示例</h2>
-<pre># JSON 返回
-curl "https://YOUR_HOST/api/play?movie=vod-12345&source=BBA&episode=1"
+<h3>顶层响应结构</h3>
+<pre><code>{
+  "code": 1,
+  "msg": "数据列表",          // 详情模式返回 "数据详情"
+  "page": 1, "pagecount": 1, "limit": 20, "total": 3,
+  "list": [ /* 见下 */ ],
+  "class": [ { "type_id": 2, "type_name": "连续剧" }, ... ]   // 始终附带
+}</code></pre>
 
-# 302 直链
-curl -L "https://YOUR_HOST/api/play?movie=vod-12345&source=BBA&episode=1&redirect=1"</pre>
+<h3>分隔符规范</h3>
+<table>
+  <tr><th>字段</th><th>分隔符</th><th>示例</th></tr>
+  <tr><td><code>vod_play_from</code>（列表）</td><td><code>,</code></td><td><code>BBA,bytedance,youku</code></td></tr>
+  <tr><td><code>vod_play_from</code>（详情）</td><td><code>$$$</code></td><td><code>BBA$$$bytedance$$$youku</code></td></tr>
+  <tr><td><code>vod_play_url</code> 源间</td><td><code>$$$</code></td><td><code>src1_urls$$$src2_urls</code></td></tr>
+  <tr><td><code>vod_play_url</code> 源内集</td><td><code>#</code></td><td><code>第01集$URL#第02集$URL</code></td></tr>
+  <tr><td><code>vod_play_url</code> 每集</td><td><code>name$url</code></td><td><code>第01集$https://域名/api/play?...</code></td></tr>
+</table>
 
-<h2>导入片目</h2>
-<pre>curl -X POST "https://YOUR_HOST/api/add-movie" \
+<h3>cURL 示例</h3>
+<pre><code># 全部列表
+curl "https://$HOST/api/appcms"
+
+# 单片详情
+curl "https://$HOST/api/appcms?ac=detail&ids=305048"
+
+# 按关键字搜索
+curl "https://$HOST/api/appcms?wd=法医"
+
+# 按分类筛选
+curl "https://$HOST/api/appcms?type_id=2"     # 连续剧
+curl "https://$HOST/api/appcms?class_id=30"   # 短剧</code></pre>
+
+<h2>📺 播放器使用（直连播放）</h2>
+<p>苹果 CMS V10 输出的 <code>vod_play_url</code> 里的每集 URL 就是下面这个格式 — 播放器（m3u8/MPV/VLC/TVBox）可直接播放。</p>
+
+<h3>基本格式</h3>
+<pre><code>GET /api/play?movie=&lt;vod_id&gt;&amp;source=&lt;code&gt;&amp;episode=&lt;n&gt;[&amp;raw=1][&amp;refresh=1]</code></pre>
+
+<h3>示例</h3>
+<pre><code># 默认：m3u8 自动重写分片走 /api/seg 代理（跨域播放器友好）
+curl "https://$HOST/api/play?movie=vod-19067&source=BBA&episode=1"
+
+# raw=1：302 到原始直链（省函数流量；需播放器 UA 设为 dart）
+curl -L "https://$HOST/api/play?movie=vod-19067&source=BBA&episode=1&raw=1"
+
+# refresh=1：强制跳过缓存重新解析
+curl "https://$HOST/api/play?movie=vod-19067&source=BBA&episode=1&refresh=1"</code></pre>
+
+<h3>参数说明</h3>
+<table>
+  <tr><th>参数</th><th>必需</th><th>说明</th></tr>
+  <tr><td><code>movie</code></td><td>是</td><td>片目 id，形如 <code>vod-305048</code></td></tr>
+  <tr><td><code>source</code></td><td>是</td><td>播放源代码，如 <code>BBA</code> / <code>bytedance</code> / <code>youku</code></td></tr>
+  <tr><td><code>episode</code></td><td>是</td><td>集号（数字），如 <code>1</code> / <code>12</code></td></tr>
+  <tr><td><code>raw</code></td><td>否</td><td><code>1</code> = 302 到直链（不经函数代理）</td></tr>
+  <tr><td><code>refresh</code></td><td>否</td><td><code>1</code> = 跳过缓存，强制重新解析</td></tr>
+</table>
+
+<h3>常见播放器配置</h3>
+<details>
+<summary><b>MPV / VLC — 直接播放 m3u8</b></summary>
+<pre><code>mpv "https://$HOST/api/play?movie=vod-19067&source=BBA&episode=1"
+vlc  "https://$HOST/api/play?movie=vod-19067&source=BBA&episode=1"</code></pre>
+</details>
+
+<details>
+<summary><b>TVBox / 播放器（走 raw=1 直链，需设置 UA）</b></summary>
+<pre><code># 需把播放器 User-Agent 设为：Dart/3.13 (dart:io)
+"https://$HOST/api/play?movie=vod-19067&source=BBA&episode=1&raw=1"</code></pre>
+</details>
+
+<h2>🔧 运维端点</h2>
+<table>
+  <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+  <tr><td><span class="badge b-get">GET</span></td><td><code>/health</code></td><td>健康检查（版本 / 状态 / 片目数 / 缓存大小）</td></tr>
+  <tr><td><span class="badge b-get">GET</span></td><td><code>/api/catalog</code></td><td>片库列表（内部结构）</td></tr>
+  <tr><td><span class="badge b-get">GET</span></td><td><code>/api/search?q=&lt;keyword&gt;</code></td><td>按关键字搜索</td></tr>
+  <tr><td><span class="badge b-get">GET</span></td><td><code>/api/token?movie=&amp;source=&amp;episode=</code></td><td>调试：查看原始 token</td></tr>
+  <tr><td><span class="badge b-get">GET</span></td><td><code>/api/store</code></td><td>存储自检（Turso / KV 状态）</td></tr>
+  <tr><td><span class="badge b-get">GET</span></td><td><code>/api/seg?url=&lt;base64&gt;</code></td><td>媒体代理（Range 透传 + dart UA）</td></tr>
+  <tr><td><span class="badge b-post">POST</span></td><td><code>/api/add-movie</code></td><td>导入 maomao.php 详情 dump（免重部署）</td></tr>
+  <tr><td><span class="badge b-del">DELETE</span></td><td><code>/api/delete/&lt;id&gt;</code></td><td>删除片目</td></tr>
+  <tr><td><span class="badge b-post">POST</span></td><td><code>/api/cache/clear</code></td><td>清空解析缓存</td></tr>
+</table>
+
+<h2>📥 导入新片目</h2>
+<p>把从 App 抓到的详情 JSON（<code>data.vod_info + data.vod_url_with_player</code> 结构）POST 到接口即可，无需重新部署。</p>
+<pre><code>curl -X POST "https://$HOST/api/add-movie" \
   -H "Content-Type: application/json" \
-  --data-binary @detail.json</pre>
+  --data-binary @detail.json</code></pre>
+<p>配置了 Turso 后，新片目会直接落库到数据库（跨实例、跨重部署持久化）。</p>
+
+<h2>⚠️ 使用说明</h2>
+<ul>
+  <li><b>本项目无认证</b> — 公网部署请自行加前置（nginx / Cloudflare Access / Bearer 反代）。</li>
+  <li>片库规模 = 已导入详情包的片目数；新增片目按上面 <code>/api/add-movie</code> 上传。</li>
+  <li>本项目仅限个人学习研究抓包/反代技术，请遵守相关平台服务条款与版权边界。</li>
+</ul>
+
+<p class="sub" style="margin-top:2rem;text-align:center">
+  v<span id="ver">—</span> · <a href="/health">health</a> ·
+  <a href="https://github.com/Theadvocate-bit/mmys-api">GitHub</a>
+</p>
 
 <script>
+  // Replace __FIRST_ID__ placeholders with the first vod in the catalog
+  const url = new URL(location.origin + "/api/catalog");
+  // Fetch health first, then catalog for first vod_id
   fetch("/health")
     .then(r => r.json())
     .then(d => {
       const el = document.getElementById("status");
+      const ver = document.getElementById("ver");
       if (d.status === "ok") {
-        el.innerHTML = `<span class="ok">✓ 服务正常</span> · v${d.version} · ${d.movies} 片 · 缓存 ${d.cache_size} 条`;
+        el.innerHTML = `<span class="ok">✓ 服务正常</span> · v${d.version} · ${d.movies} 片 · Turso ${d.turso ? '<span class="ok">已连接</span>' : '<span class="warn">未配置（兜底模式）</span>'} · 缓存 ${d.cache_size} 条`;
+        ver.textContent = d.version;
       } else {
         el.innerHTML = `<span class="err">✗ ${d.error || "未知错误"}</span>`;
       }
+      // Patch the quick links with the first vod id
+      return fetch("/api/catalog").then(r => r.json());
+    })
+    .then(d => {
+      const first = d && d.movies && d.movies.length > 0 ? d.movies[0] : null;
+      const fid = first ? (first.vod_id || first.id) : "305048";
+      document.querySelectorAll("a[href*='__FIRST_ID__']").forEach(a => {
+        const href = a.getAttribute("href").replace(/__FIRST_ID__/g, fid);
+        a.setAttribute("href", href);
+        a.textContent = `详情（${first ? first.name : "第一部"}）`;
+      });
     })
     .catch(e => {
       document.getElementById("status").innerHTML = `<span class="err">✗ ${e}</span>`;
     });
+
+  // Substitue $HOST in code samples with the actual origin (relative links work too)
+  document.querySelectorAll("pre").forEach(p => {
+    p.innerHTML = p.innerHTML.replace(/\$HOST/g, new URL(location.origin).hostname);
+  });
 </script>
+
 </body>
 </html>
