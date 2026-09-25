@@ -338,7 +338,18 @@ export async function getAllMovies(env) {
     const db = getDb(env);
     if (!db.error) {
       await ensureSchema(db);
-      return await _withBackoff(() => getAllMoviesFromDb(db));
+      const rows = await _withBackoff(() => getAllMoviesFromDb(db));
+      // 数据库返回空时合并内嵌兜底片库，避免刚部署的空 Turso
+      // 把所有片目隐藏掉。数据库一旦有数据就完全优先数据库。
+      if (!rows || rows.length === 0) {
+        const merged = { ...(EMBEDDED_CATALOG.vods || {}) };
+        for (const [id, m] of _overlay) merged[id] = m;
+        return Object.values(merged);
+      }
+      // 有数据库记录，合并内存 overlay（运行时新增未持久化前的）
+      const map = new Map(rows.map((r) => [r.id, r]));
+      for (const [id, m] of _overlay) map.set(id, m);
+      return Array.from(map.values());
     }
   } catch {}
   const merged = { ...(EMBEDDED_CATALOG.vods || {}) };
