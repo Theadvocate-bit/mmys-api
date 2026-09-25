@@ -82,6 +82,7 @@ def build() -> None:
         embedded[vid] = {
             "id": f"vod-{vid}",
             "vod_id": str(vid),
+            "type_id": vod.get("type_id", ""),
             "name": vod.get("vod_name", ""),
             "vod_pic": vod.get("vod_pic", ""),
             "vod_remarks": vod.get("vod_remarks", ""),
@@ -93,6 +94,7 @@ def build() -> None:
                 "vod_remarks": vod.get("vod_remarks", ""),
                 "vod_class": vod.get("vod_class", ""),
                 "vod_content": vod.get("vod_content", ""),
+                "type_id": vod.get("type_id", ""),
             },
             "sources": sources,
             "imported_at": vod.get("imported_at", ""),

@@ -137,74 +137,114 @@ Makers 控制台 → 项目 → **Direct Upload** → 选择整个文件夹。
 | `?raw=1` | 302 到原始直链（省函数流量，播放器需自备 dart UA） |
 | `?refresh=1` | 跳过缓存，强制重新解析 |
 
-## 🍎 苹果 CMS V10 API（唯一业务出口）
+## 🍎 苹果 CMS V10 API（严格对齐 /api.php/provide/vod 规范）
 
-完全兼容苹果 CMS V10 标准资源搜索 API，任意支持该格式的 CMS / 播放器都能直连。
+严格对齐 hongniuzy2 / bfzy / dyttzy 三家的标准格式，任意支持苹果 CMS V10 的资源采集器/播放器可直接消费。
 
 ### 端点
 
 | 参数 | 说明 |
 |---|---|
-| `GET /api/appcms` | 片库列表（分页，默认 page=1, limit=20） |
-| `GET /api/appcms?ids=<vod_id>` | 单片详情 |
-| `GET /api/appcms?wd=<关键字>` | 搜索 |
-| `GET /api/appcms?class_id=<id>` | 按分类筛选 |
-| `GET /api/appcms?categories=1` | 分类列表 |
-| `GET /api/appcms?page=&limit=` | 分页参数 |
+| `GET /api/appcms` | 精简列表（8 字段/项，默认） |
+| `GET /api/appcms?ac=detail&ids=<vod_id>` | 详情（83 字段/项） |
+| `GET /api/appcms?wd=<关键字>` | 按名称/简介/分类搜索 |
+| `GET /api/appcms?class_id=<type_id>` | 按分类筛选（`type_id=` 别名同义） |
+| `GET /api/appcms?ids=<id>` | 按 id 过滤（列表格式） |
+| `GET /api/appcms?page=&limit=` | 分页（limit 上限 100） |
+| `GET /api/appcms?text=<关键字>` | `wd=` 的别名 |
 
-### 格式说明
-
-**vod_play_from**：播放源名称，多个用 `###` 分隔
-
-**vod_play_url**：播放地址
-- 多源用 `###` 分隔
-- 源内多集用 `$$$` 分隔
-- 每集格式：`名称$URL`
-
-示例：
-```
-播放源1第01集$http://example.com/1.m3u8$$$播放源1第02集$http://example.com/2.m3u8###播放源2第01集$http://example.com/3.m3u8
-```
-
-### 示例
-
-```bash
-# 获取片库列表
-curl https://<域名>/api/appcms
-
-# 获取详情
-curl https://<域名>/api/appcms?ids=305048
-
-# 搜索
-curl "https://<域名>/api/appcms?wd=法医"
-
-# 获取分类
-curl "https://<域名>/api/appcms?categories=1"
-```
-
-### 响应示例
+### 顶层结构
 
 ```json
 {
   "code": 1,
-  "msg": "success",
+  "msg": "数据列表",         // 详情模式返回 "数据详情"
   "page": 1,
-  "pagecount": 2,
+  "pagecount": 1,
   "limit": 20,
-  "total": 2,
-  "list": [
-    {
-      "vod_id": "305048",
-      "vod_name": "为爱正名",
-      "vod_pic": "",
-      "vod_remarks": "",
-      "vod_class": "",
-      "vod_content": "",
-      "vod_play_from": "BBA###bytedance###qq###IMDB###Ksvideo",
-      "vod_play_url": "第01集$https://域名/api/play?...$$$第02集$https://域名/api/play?...###..."
-    }
-  ]
+  "total": 3,
+  "list": [...],             // 8 或 83 字段，取决于 ac
+  "class": [{"type_id": 2, "type_name": "连续剧"}, ...]   // 始终附带
 }
+```
+
+### 列表项（8 字段）
+
+```json
+{
+  "vod_id": 19067,
+  "vod_name": "师兄太稳健",
+  "type_id": 2,
+  "type_name": "连续剧",
+  "vod_en": "",
+  "vod_time": "2026-09-25 20:00:15",
+  "vod_remarks": "30集全",
+  "vod_play_from": "BBA,bytedance,youku,qiyi,seven,Ace,qsvip,qingshan,IMDB,Ksvideo"
+}
+```
+
+### 详情项（83 字段）
+
+关键字段节选：
+```json
+{
+  "vod_id": 19067,
+  "type_id": 2,
+  "type_id_1": 2,
+  "vod_name": "师兄太稳健",
+  "vod_sub": "",
+  "vod_en": "",
+  "vod_status": 1,
+  "vod_letter": "S",           // 拼音首字母（兜底：首字符大写）
+  "vod_tag": "",
+  "vod_class": "奇幻,古装,电视,连续",
+  "vod_pic": "https://...",
+  "vod_actor": "王浩信,蔡思贝,袁伟豪...",
+  "vod_director": "",
+  "vod_blurb": "",
+  "vod_remarks": "30集全",
+  "vod_pubdate": "",
+  "vod_area": "",
+  "vod_lang": "",
+  "vod_year": "",
+  "vod_score": "",
+  "vod_content": "前世是重症患者...",
+  "vod_play_from": "BBA$$$bytedance$$$youku$$$...",
+  "vod_play_url": "第01集$https://域名/api/play?...#第02集$https://域名/api/play?...$$$1$https://...",
+  "type_name": "连续剧"
+}
+```
+
+### 分隔符规范
+
+| 字段 | 分隔符 | 示例 |
+|---|---|---|
+| `vod_play_from` (list) | `,` | `BBA,bytedance,youku` |
+| `vod_play_from` (detail) | `$$$` | `BBA$$$bytedance$$$youku` |
+| `vod_play_url` 源间 | `$$$` | `source1_urls$$$source2_urls` |
+| `vod_play_url` 源内集 | `#` | `第01集$URL#第02集$URL` |
+| `vod_play_url` 每集 | `name$url` | `第01集$https://...` |
+
+### 分类字典
+
+内置 46 类主分类（与 hongniu/bfzy/dytt 三家的 `class` 数组一致）：
+电影 / 连续剧 / 综艺 / 动漫 / 动作片 / 喜剧片 / 爱情片 / 科幻片 / 恐怖片 / 剧情片 / 战争片 / 国产剧 / 港澳剧 / 日剧 / 欧美剧 / 台湾剧 / 泰剧 / 韩剧 / 纪录片 / 动漫电影 / 伦理片 / 体育赛事 / 短剧 / 预告片 / 足球 / 篮球 / 台球 / 其他赛事 / 中国动漫 / 日本动漫 / 欧美动漫 / 大陆综艺 / 日韩综艺 / 港台综艺 / 欧美综艺 / 古装仙侠 / 现代都市 / 穿越年代 / 言情总裁
+
+### 示例
+
+```bash
+# 全部列表
+curl https://<域名>/api/appcms
+
+# 单片详情（83 字段）
+curl "https://<域名>/api/appcms?ac=detail&ids=305048"
+
+# 搜索
+curl "https://<域名>/api/appcms?wd=法医"
+
+# 按分类筛选
+curl "https://<域名>/api/appcms?type_id=2"        # 连续剧
+curl "https://<域名>/api/appcms?class_id=30"      # 短剧
 ```
 
 ## 📺 播放器用法

@@ -220,25 +220,27 @@ assert(EMBEDDED_CATALOG.vods["19067"].sources.qiyi, "19067 qiyi source (new)");
 assert(EMBEDDED_CATALOG.vods["19067"].sources.qingshan, "19067 qingshan source (new)");
 assert(EMBEDDED_CATALOG.vods["19067"].sources.BBA.episode_names["1"] === "第01集", "19067 BBA episode name preserved");
 
-// --- AppCMS V10 Format ---
+// --- AppCMS V10 Format (standard /api.php/provide/vod spec) ---
 console.log("AppCMS V10 Format:");
 const {
-  vodToAppCms,
-  parseVodClass,
+  vodToListItem,
+  vodToDetail,
   filterByClass,
   getAllCategories,
-  validatePlayUrlFormat,
-  validateAppCmsResponse,
 } = await import("../edge-functions/lib/appcms_format.js");
 
-// vodToAppCms - basic conversion
 const testVod = {
   id: "vod-12345",
-  vod_id: 12345,
+  vod_id: "12345",
   name: "Test Movie",
   vod_pic: "http://pic.jpg",
   vod_remarks: "更新至第10集",
   vod_class: "剧情,动作,冒险",
+  vod_content: "This is a test movie description.",
+  vod_actor: "Actor A, Actor B",
+  vod_director: "Director X",
+  vod_area: "中国",
+  vod_year: "2024",
   vod_info: {
     vod_name: "Test Movie",
     vod_pic: "http://pic.jpg",
@@ -255,146 +257,119 @@ const testVod = {
     source1: {
       name: "Source 1",
       parse_api: "http://api/test?url=",
-      episodes: {
-        "1": "token1",
-        "2": "token2",
-        "3": "token3",
-      },
+      episodes: { "1": "token1", "2": "token2", "3": "token3" },
+      episode_names: { "1": "第01集", "2": "第02集", "3": "第03集" },
     },
     source2: {
       name: "Source 2",
       parse_api: "http://api/test2?url=",
-      episodes: {
-        "1": "token4",
-      },
+      episodes: { "1": "token4" },
+      episode_names: { "1": "1" },
     },
   },
 };
 
 const origin = "https://test.example.com";
-const cmsResult = vodToAppCms(testVod, origin);
 
-assertEq(cmsResult.vod_id, 12345, "vod_id preserved");
-assertEq(cmsResult.vod_name, "Test Movie", "vod_name set");
-assertEq(cmsResult.vod_pic, "http://pic.jpg", "vod_pic set");
-assertEq(cmsResult.vod_remarks, "更新至第10集", "vod_remarks set");
-assertEq(cmsResult.vod_class, "剧情,动作,冒险", "vod_class set");
-assertEq(cmsResult.vod_content, "This is a test movie description.", "vod_content set");
-assertEq(cmsResult.vod_actor, "Actor A, Actor B", "vod_actor set");
-assertEq(cmsResult.vod_director, "Director X", "vod_director set");
-assertEq(cmsResult.vod_area, "中国", "vod_area set");
-assertEq(cmsResult.vod_year, "2024", "vod_year set");
-assertEq(cmsResult.vod_score, "8.5", "vod_score set");
+// --- vodToListItem: 精简 8 字段（列表默认） ---
+const listItem = vodToListItem(testVod);
+assertEq(listItem.vod_id, 12345, "list vod_id numeric");
+assertEq(listItem.vod_name, "Test Movie", "list vod_name");
+assert(typeof listItem.type_id === "number", "list type_id numeric");
+assertEq(listItem.type_name, "剧情", "list type_name from vod_class[0]");
+assertEq(listItem.vod_time, "", "list vod_time empty when absent");
+assertEq(listItem.vod_remarks, "更新至第10集", "list vod_remarks");
+// vod_play_from: 逗号分隔（列表格式）
+assertEq(listItem.vod_play_from, "source1,source2", "list vod_play_from comma-separated");
+assertEq(Object.keys(listItem).length, 8, "list item exactly 8 fields");
 
-// vod_play_from format
-assertEq(cmsResult.vod_play_from, "Source 1###Source 2", "vod_play_from format");
+// --- vodToDetail: 83 字段 ---
+const cmsResult = vodToDetail(testVod, origin);
+assertEq(cmsResult.vod_id, 12345, "detail vod_id numeric");
+assertEq(cmsResult.vod_name, "Test Movie", "detail vod_name");
+assertEq(cmsResult.vod_pic, "http://pic.jpg", "detail vod_pic");
+assertEq(cmsResult.vod_remarks, "更新至第10集", "detail vod_remarks");
+assertEq(cmsResult.vod_class, "剧情,动作,冒险", "detail vod_class");
+assertEq(cmsResult.vod_content, "This is a test movie description.", "detail vod_content");
+assertEq(cmsResult.vod_actor, "Actor A, Actor B", "detail vod_actor");
+assertEq(cmsResult.vod_director, "Director X", "detail vod_director");
+assertEq(cmsResult.vod_area, "中国", "detail vod_area");
+assertEq(cmsResult.vod_year, "2024", "detail vod_year");
+assertEq(cmsResult.vod_score, "8.5", "detail vod_score");
 
-// vod_play_url format - check structure
-assert(cmsResult.vod_play_url.includes("###"), "vod_play_url has source separator");
-assert(cmsResult.vod_play_url.includes("$$$"), "vod_play_url has episode separator");
-assert(cmsResult.vod_play_url.includes("第01集$"), "vod_play_url has episode name format");
-assert(cmsResult.vod_play_url.includes("/api/play?"), "vod_play_url points to play API");
+// vod_play_from: $$$ 分隔（详情格式）
+assertEq(cmsResult.vod_play_from, "source1$$$source2", "detail vod_play_from $$$-separated");
 
-// Validate play URL format
-assert(validatePlayUrlFormat(cmsResult.vod_play_url), "vod_play_url format valid");
-assert(validatePlayUrlFormat("第01集$http://example.com/1.m3u8$$$第02集$http://example.com/2.m3u8"), "multi-episode format valid");
-assert(validatePlayUrlFormat("Source1第01集$http://example.com/1$$$Source1第02集$http://example.com/2###Source2第01集$http://example.com/3"), "multi-source multi-episode format valid");
-assert(!validatePlayUrlFormat("invalid format without separator"), "invalid format rejected");
-assert(!validatePlayUrlFormat(""), "empty string rejected");
+// vod_play_url: 源 $$$，集 #，集名$url
+assert(cmsResult.vod_play_url.includes("$$$"), "detail vod_play_url has source sep $$$");
+assert(cmsResult.vod_play_url.includes("#"), "detail vod_play_url has episode sep #");
+assert(!cmsResult.vod_play_url.includes("###"), "detail vod_play_url no legacy ###");
+assert(cmsResult.vod_play_url.includes("第01集$"), "detail vod_play_url uses source-native ep name");
+assert(cmsResult.vod_play_url.includes("/api/play?"), "detail vod_play_url points to play API");
+assert(cmsResult.vod_play_url.includes("movie=vod-12345"), "detail vod_play_url carries vod id");
+// Episode name preserved from source
+assert(cmsResult.vod_play_url.includes("1$"), "detail vod_play_url preserves bare '1' name (source2)");
 
-// parseVodClass
-assertEq(parseVodClass("剧情,动作,冒险"), ["剧情", "动作", "冒险"], "parseVodClass basic");
-assertEq(parseVodClass("剧情，动作，冒险"), ["剧情", "动作", "冒险"], "parseVodClass Chinese comma");
-assertEq(parseVodClass(""), [], "parseVodClass empty");
-assertEq(parseVodClass(null), [], "parseVodClass null");
+// Type-name derivation
+assertEq(cmsResult.type_name, "剧情", "detail type_name from vod_class[0]");
 
-// filterByClass
+// --- filterByClass: 按 type_id 过滤（多 id 用逗号） ---
 const testMovies = [
-  { id: "1", name: "A", vod_class: "剧情,动作" },
-  { id: "2", name: "B", vod_class: "喜剧,爱情" },
-  { id: "3", name: "C", vod_class: "剧情,冒险" },
+  { id: "vod-1", name: "A", type_id: "1" },
+  { id: "vod-2", name: "B", type_id: "2" },
+  { id: "vod-3", name: "C", type_id: "1" },
+  { id: "vod-4", name: "D", type_id: "3" },
 ];
-assertEq(filterByClass(testMovies, "剧情").length, 2, "filterByClass by name");
-assertEq(filterByClass(testMovies, "0").length, 3, "filterByClass by index 0");
-assertEq(filterByClass(testMovies, "1").length, 3, "filterByClass by index 1");
-assertEq(filterByClass(testMovies, "2").length, 0, "filterByClass by index 2 (empty)");
+assertEq(filterByClass(testMovies, "1").length, 2, "filterByClass single id");
+assertEq(filterByClass(testMovies, "1,2").length, 3, "filterByClass multi id");
+assertEq(filterByClass(testMovies, "99").length, 0, "filterByClass no match");
+assertEq(filterByClass(testMovies, "").length, 4, "filterByClass empty filter = all");
 
-// getAllCategories
-const testCats = getAllCategories(testMovies);
-assert(testCats.length > 0, "getAllCategories returns categories");
-assert(testCats[0].class_id === "0", "first category id is 0");
-assert(testCats[0].class_name, "category has name");
-assert(typeof testCats[0].count === "number", "category has count");
-
-// validateAppCmsResponse - list response
-const listResponse = {
-  code: 1,
-  msg: "success",
-  page: 1,
-  pagecount: 2,
-  limit: 10,
-  total: 15,
-  list: [
-    {
-      vod_id: 1,
-      vod_name: "Movie 1",
-      vod_play_from: "Source 1",
-      vod_play_url: "第01集$http://example.com/1.m3u8",
-    },
-  ],
-};
-let valResult = validateAppCmsResponse(listResponse);
-assert(valResult.valid, "list response valid");
-
-// validateAppCmsResponse - detail response
-const detailResponse = {
-  code: 1,
-  msg: "success",
-  data: {
-    vod_id: 1,
-    vod_name: "Movie 1",
-    vod_play_from: "Source 1",
-    vod_play_url: "第01集$http://example.com/1.m3u8",
-  },
-};
-valResult = validateAppCmsResponse(detailResponse);
-assert(valResult.valid, "detail response valid");
-
-// validateAppCmsResponse - error response (code: -1 is valid format, just indicates error)
-const errorResponse = { code: -1, msg: "error" };
-valResult = validateAppCmsResponse(errorResponse);
-assert(valResult.valid, "error response format is valid (code -1 with msg)");
-
-// validateAppCmsResponse - missing required fields
-const missingFieldsResponse = {};
-valResult = validateAppCmsResponse(missingFieldsResponse);
-assert(!valResult.valid, "missing fields response rejected");
-assert(valResult.errors.length > 0, "missing fields response has errors");
+// --- getAllCategories ---
+const cats = getAllCategories(testMovies);
+assert(cats.length >= 3, "getAllCategories returns entries");
+assert(cats[0].type_id, "category has type_id");
+assert(typeof cats[0].type_name === "string", "category has type_name");
+// sorted by type_id
+for (let i = 1; i < cats.length; i++) {
+  assert(Number(cats[i].type_id) >= Number(cats[i - 1].type_id), "categories sorted");
+}
 
 // Test with real embedded catalog data
 console.log("AppCMS with real catalog:");
 const realVod = EMBEDDED_CATALOG.vods["305048"];
-const realCms = vodToAppCms(realVod, origin);
-assert(realCms.vod_id === "305048", "real vod_id preserved");
-assert(realCms.vod_name === "为爱正名", "real vod_name correct");
-assert(realCms.vod_play_from.includes("###"), "real vod has multiple sources");
-assert(validatePlayUrlFormat(realCms.vod_play_url), "real vod_play_url format valid");
+const realListItem = vodToListItem(realVod);
+assert(realListItem.vod_id === 305048, "real vod_id numeric (305048)");
+assert(realListItem.vod_name === "为爱正名", "real vod_name correct");
+assert(realListItem.vod_play_from.includes(","), "real list uses comma separator");
+assert(!realListItem.vod_play_from.includes("$$$"), "real list does not use $$$ in play_from");
 
-// Test source count matches
+// Detail view of 305048
+const realCms = vodToDetail(realVod, origin);
+assert(realCms.vod_id === 305048, "real detail vod_id numeric");
+assert(realCms.vod_play_from.includes("$$$"), "real detail uses $$$ separator");
+assert(!realCms.vod_play_from.includes("###"), "real detail has no legacy ### in play_from");
+assert(realCms.vod_play_url.includes("$$$"), "real detail vod_play_url has $$$ source sep");
+assert(!realCms.vod_play_url.includes("###"), "real detail vod_play_url no legacy ###");
+
+// Test source count matches (all three views)
 const sourceCount = Object.keys(realVod.sources).length;
-const playFromCount = realCms.vod_play_from.split("###").length;
-assertEq(sourceCount, playFromCount, "source count matches play_from count");
-
-const playUrlSources = realCms.vod_play_url.split("###").length;
-assertEq(sourceCount, playUrlSources, "source count matches play_url source count");
+const playFromListCount = realListItem.vod_play_from.split(",").length;
+assertEq(sourceCount, playFromListCount, "list play_from count matches");
+const playFromDetailCount = realCms.vod_play_from.split("$$$").length;
+assertEq(sourceCount, playFromDetailCount, "detail play_from count matches");
+const playUrlSources = realCms.vod_play_url.split("$$$").length;
+assertEq(sourceCount, playUrlSources, "detail play_url source count matches");
 
 // Episode names are preserved from source (第01集, 1, 01) when available
 const vod19067 = EMBEDDED_CATALOG.vods["19067"];
-const cms19067 = vodToAppCms(vod19067, origin);
+const list19067 = vodToListItem(vod19067);
+const cms19067 = vodToDetail(vod19067, origin);
 assert(cms19067.vod_play_url.includes("第01集$"), "19067 BBA emits source-native 第01集");
-assert(cms19067.vod_play_from.split("###").length === 10, "19067 has 10 sources in play_from");
-// Check that youku bare-number name survives to output
-const youkuSlice = cms19067.vod_play_url.split("###")[2]; // youku is 3rd source
+assert(list19067.vod_play_from.split(",").length === 10, "19067 has 10 sources in list play_from");
+assert(cms19067.vod_play_from.split("$$$").length === 10, "19067 has 10 sources in detail play_from");
+// Check that youku bare-number name survives to output (youku is 3rd source)
+const youkuSlice = cms19067.vod_play_url.split("$$$")[2];
 assert(/^1\$/.test(youkuSlice), "19067 youku uses bare '1' name from HAR");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
