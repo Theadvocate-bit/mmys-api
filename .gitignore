@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# Runtime data — keep your catalog out of version control by default.
+# If you want it committed (e.g. private repo, single user), remove the line.
+data/catalog.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
