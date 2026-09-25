@@ -15,7 +15,7 @@ import {
   b64uDec,
   decompressIfGzip,
   decodeUtf8,
-} from "../lib/db.js";
+} from "../edge-functions/lib/db.js";
 
 let passed = 0;
 let failed = 0;
@@ -47,22 +47,20 @@ console.log(`\n=== mmys_api smoke tests (v${VERSION}) ===\n`);
 // --- getDb ---
 console.log("getDb:");
 assert(getDb({}).error, "missing env vars returns error");
-assert(getDb({ TURSO_URL: "https://x.turso.io", TURSO_TOKEN: "tok" }).url, "valid env vars");
-assert(!getDb({ TURSO_URL: "https://x.turso.io", TURSO_TOKEN: "tok" }).error, "no error with valid vars");
+assert(getDb({ TURSO_DATABASE_URL: "https://x.turso.io", TURSO_AUTH_TOKEN: "tok" }).url, "valid env vars");
+assert(!getDb({ TURSO_DATABASE_URL: "https://x.turso.io", TURSO_AUTH_TOKEN: "tok" }).error, "no error with valid vars");
 
 // URL prefix auto-conversion
 let db = getDb({ TURSO_DATABASE_URL: "libsql://x.turso.io", TURSO_AUTH_TOKEN: "tok" });
 assertEq(db.url, "https://x.turso.io", "libsql:// prefix converted to https://");
-db = getDb({ TURSO_URL: "turso://x.turso.io", TURSO_TOKEN: "tok" });
+db = getDb({ TURSO_DATABASE_URL: "turso://x.turso.io", TURSO_AUTH_TOKEN: "tok" });
 assertEq(db.url, "https://x.turso.io", "turso:// prefix converted to https://");
 db = getDb({ TURSO_DATABASE_URL: "https://x.turso.io/", TURSO_AUTH_TOKEN: "tok" });
 assertEq(db.url, "https://x.turso.io", "trailing slash stripped");
 
-// Backwards compat env var names
-db = getDb({ TURSO_URL: "https://x.turso.io", TURSO_TOKEN: "tok" });
-assert(!db.error, "TURSO_URL/TURSO_TOKEN accepted");
-db = getDb({ TURSO_DATABASE_URL: "https://x.turso.io", TURSO_AUTH_TOKEN: "tok" });
-assert(!db.error, "TURSO_DATABASE_URL/TURSO_AUTH_TOKEN accepted");
+// Legacy env var names are no longer accepted
+db = getDb({ URL: "https://x.turso.io", TOKEN: "tok" });
+assert(db.error, "unknown env var names rejected");
 
 // --- getConfig ---
 console.log("getConfig:");
@@ -162,28 +160,10 @@ let threw = false;
 try { buildMovieFromDetail({}); } catch { threw = true; }
 assert(threw, "missing vod_info throws");
 
-// --- Base58 ---
-console.log("b58Encode/b58Decode:");
-const { b58Encode, b58Decode } = await import("../lib/base58.js");
-assertEq(b58Encode("hello world"), "StV1DL6CwTryKyV", "hello world");
-assertEq(b58Encode(""), "", "empty string");
-assertEq(b58Encode(new Uint8Array([0])), "1", "single zero byte");
-assertEq(b58Encode(new Uint8Array([0, 0])), "11", "two zero bytes");
-assertEq(b58Encode(new Uint8Array([0, 0, 0])), "111", "three zero bytes");
-let allOne = true;
-for (let b = 0; b < 58; b++) {
-  if (b58Encode(new Uint8Array([b])).length !== 1) { allOne = false; break; }
-}
-assert(allOne, "all 58 byte values encode to 1 char");
-for (const s of ["hello", "TVBox config", "电影天堂资源", JSON.stringify({ a: 1, b: "中文" })]) {
-  const e = b58Encode(s);
-  const d = new TextDecoder().decode(b58Decode(e));
-  assert(d === s, `roundtrip: ${s.substring(0, 20)}`);
-}
-
+// --- Embedded catalog ---
 // --- Import embedded catalog ---
 console.log("EMBEDDED_CATALOG:");
-const { EMBEDDED_CATALOG } = await import("../lib/catalog_data.js");
+const { EMBEDDED_CATALOG } = await import("../edge-functions/lib/catalog_data.js");
 assert(Object.keys(EMBEDDED_CATALOG.vods).length >= 2, "embedded catalog has vods");
 assert(EMBEDDED_CATALOG.vods["305048"], "vod 305048 present");
 assert(EMBEDDED_CATALOG.vods["308179"], "vod 308179 present");
@@ -199,7 +179,7 @@ const {
   getAllCategories,
   validatePlayUrlFormat,
   validateAppCmsResponse,
-} = await import("../lib/appcms_format.js");
+} = await import("../edge-functions/lib/appcms_format.js");
 
 // vodToAppCms - basic conversion
 const testVod = {

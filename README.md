@@ -1,7 +1,7 @@
 # mmys_api — EdgeOne Makers 部署版
 
-把 mmys_api 适配到 **EdgeOne Makers（原 EdgeOne Pages）** 的云函数：
-选片 → 选源选集 → 实时调 parse_api 换新鲜直链 → 任意播放器直连播放。
+选片 → 选源选集 → 实时调 parse_api 换新鲜直链 → 播放器直连播放。
+**存储统一走 Turso，API 出口只有苹果 CMS V10 一种。**
 
 ## 📦 项目结构
 
@@ -9,44 +9,36 @@
 mmys_api/
 ├── edge-functions/
 │   ├── health.js              # GET /health — 健康检查
-│   └── api/
-│       ├── catalog.js         # GET /api/catalog — 片库列表
-│       ├── movie/[id].js      # GET/DELETE /api/movie/:id — 详情
-│       ├── play.js            # GET /api/play — 播放（m3u8 重写 + 代理 + 302）
-│       ├── seg.js             # GET /api/seg — 媒体代理（Range 透传 + dart UA）
-│       ├── search.js          # GET /api/search?q= — 搜索
-│       ├── token.js           # GET /api/token — 调试（返回原始 token）
-│       ├── add-movie.js       # POST /api/add-movie — 导入片目
-│       ├── delete/[id].js     # DELETE/POST /api/delete/:id — 删除片目
-│       ├── cache/clear.js     # POST/GET /api/cache/clear — 清空解析缓存
-│       ├── store.js           # GET /api/store — 存储自检
-│       ├── mogai.js           # GET /api/mogai — TVBox 魔改 API
-│       ├── appcms.js          # GET /api/appcms — 苹果 CMS V10 API
-│       └── get.js             # GET /api/get?key= — TVBox 配置（base58）
-├── lib/
-│   ├── db.js                  # Turso 客户端（HANA pipeline）+ CRUD + 兜底 + 缓存
-│   ├── base58.js              # Base58 编解码（TVBox 配置）
-│   ├── appcms_format.js       # 苹果 CMS V10 API 格式化
-│   └── catalog_data.js        # 内嵌片库（自动生成，Turso 不可用时兜底）
-├── app.py                     # Python 本地开发版（单文件，仅标准库）
+│   ├── api/
+│   │   ├── appcms.js          # GET /api/appcms — 苹果 CMS V10 API（唯一业务出口）
+│   │   ├── play.js            # GET /api/play — 播放（m3u8 重写 + 代理 + 302）
+│   │   ├── seg.js             # GET /api/seg — 媒体代理（Range 透传 + dart UA）
+│   │   ├── catalog.js         # GET /api/catalog — 片库列表（运维用）
+│   │   ├── search.js          # GET /api/search?q= — 搜索（运维用）
+│   │   ├── token.js           # GET /api/token — 调试原始 token
+│   │   ├── store.js           # GET /api/store — 存储自检
+│   │   ├── add-movie.js       # POST /api/add-movie — 导入片目
+│   │   ├── movie/[id].js      # GET/DELETE /api/movie/:id — 详情 / 删除
+│   │   ├── delete/[id].js     # DELETE /api/delete/:id — 删除（别名）
+│   │   └── cache/clear.js     # POST /api/cache/clear — 清空解析缓存
+│   └── lib/
+│       ├── db.js              # Turso 客户端（HANA pipeline）+ CRUD + 兜底 + 缓存
+│       ├── appcms_format.js   # 苹果 CMS V10 格式化
+│       └── catalog_data.js    # 内嵌片库（Turso 不可用时兜底）
 ├── tools/
 │   ├── init_turso.mjs         # Turso 建表（HANA pipeline）
-│   ├── smoke_test.mjs         # Node 冒烟测试（44 项）
-│   ├── smoke_test.sh          # Python 冒烟测试
-│   ├── build_catalog_data.py  # 从 data/catalog.json 生成内嵌片库
-│   └── import_detail.py       # 导入详情 JSON 到 catalog.json
-├── data/catalog.json          # 片库源数据（git-ignored，本地维护）
+│   └── smoke_test.mjs         # Node 冒烟测试（87 项）
+├── data/catalog.json          # 片库源数据（本地维护，git-ignored）
 ├── public/index.html          # 首页（部署后轮询 /health）
 ├── schema.sql                 # Turso 表结构
 ├── edgeone.json               # EdgeOne Makers 配置
+├── mmys.md                    # 抓包分析原始结论（参考）
 └── README.md
 ```
 
-## 🗄️ 存储：Turso（不用 EdgeOne KV）
+## 🗄️ 存储：Turso（不使用 EdgeOne KV）
 
-**存储统一用 Turso**（libSQL Serverless，有免费额度），不使用 EdgeOne KV。
-
-### 核心设计：三级兜底 + 60s 退避
+**三级兜底 + 60s 退避**：
 
 ```
 Turso（持久化） → 实例内存 overlay → 内嵌 catalog_data.js（代码兜底）
@@ -55,7 +47,7 @@ Turso（持久化） → 实例内存 overlay → 内嵌 catalog_data.js（代�
 ```
 
 - **片库读取**：Turso → 运行时导入 → 内嵌 catalog_data.js
-- **解析缓存**：Turso（持久化，TTL 1800s） → 实例内存
+- **解析缓存**：Turso（TTL 1800s） → 实例内存
 - **退避机制**：Turso 故障后 60s 内不再重试，自动降级
 
 ### 配置步骤
@@ -63,46 +55,42 @@ Turso（持久化） → 实例内存 overlay → 内嵌 catalog_data.js（代�
 **1. 创建数据库并拿凭证**
 
 ```bash
-# 方式一：CLI
 npm install -g @tursodatabase/cli
 turso auth signup
-turso db create mmys-catalog          # 得到 libsql://mmys-catalog-<org>.turso.io
-turso db tokens create mmys-catalog   # 得到数据库专用 token
-
-# 方式二：控制台 https://console.turso.tech 建库 → Database → 取 URL 和 Token
+turso db create mmys-catalog          # → libsql://mmys-catalog-<org>.turso.io
+turso db tokens create mmys-catalog   # → 数据库 token
 ```
 
-**2. 初始化建表 + 播种片库**
+**2. 初始化建表**
 
 ```bash
 export TURSO_DATABASE_URL='libsql://mmys-catalog-<org>.turso.io'
 export TURSO_AUTH_TOKEN='<token>'
-node tools/init_turso.mjs             # 建 movies + parse_cache 表
+node tools/init_turso.mjs
 ```
 
-**3. EdgeOne Makers 控制台配置环境变量**（项目 → Settings → Environment Variables）
+**3. EdgeOne Makers 控制台环境变量**（项目 → Settings → Environment Variables）
 
 | 变量 | 值 |
 |---|---|
 | `TURSO_DATABASE_URL` | `libsql://mmys-catalog-<org>.turso.io`（自动转 https） |
 | `TURSO_AUTH_TOKEN` | 数据库 token |
-| `MYS_CACHE_TTL` | `1800`（解析缓存 TTL，秒，可选） |
-| `MYS_PARSE_TIMEOUT` | `20000`（解析超时，毫秒，可选） |
-| `MYS_STREAM_TIMEOUT` | `30000`（拉流超时，毫秒，可选） |
-| `MYS_UA_APP` | `Dart/3.13 (dart:io)`（调解析接口的 UA，可选） |
-| `MYS_UA_PLAYER` | `dart`（拉直链流的 UA，可选） |
+| `MYS_CACHE_TTL` | `1800`（解析缓存 TTL 秒，可选） |
+| `MYS_PARSE_TIMEOUT` | `20000`（解析超时毫秒，可选） |
+| `MYS_STREAM_TIMEOUT` | `30000`（拉流超时毫秒，可选） |
+| `MYS_UA_APP` | `Dart/3.13 (dart:io)`（调解析接口 UA，可选） |
+| `MYS_UA_PLAYER` | `dart`（拉直链流 UA，可选） |
 
-> 也支持旧变量名 `TURSO_URL` / `TURSO_TOKEN`（向后兼容）。
+> 只接受 `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` 两个变量名。
 
 ### 本地无账号自测
 
 ```bash
-python3 tools/build_catalog_data.py   # 从 data/catalog.json 生成内嵌片库
 # 不设 TURSO 环境变量 → 自动使用内嵌 catalog_data.js 兜底
-node tools/smoke_test.mjs             # 44 项冒烟测试
+node tools/smoke_test.mjs             # 87 项冒烟测试
 ```
 
-## 🚀 部署（三选一）
+## 🚀 部署（EdgeOne Makers 三选一）
 
 ### 方式 A：CLI 直传
 
@@ -129,20 +117,16 @@ Makers 控制台 → 项目 → **Direct Upload** → 选择整个文件夹。
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/health` | 健康检查（版本、Turso 状态、片目数、缓存大小） |
-| GET | `/api/catalog` | 片库列表 |
-| GET | `/api/movie/<id>` | 详情（含每集绝对 play_url） |
-| DELETE | `/api/movie/<id>` | 删除片目 |
-| GET | `/api/play?movie=&source=&episode=[&raw=1][&refresh=1]` | **播放** |
+| **GET** | **`/api/appcms`** | **苹果 CMS V10 API**（片库 / 详情 / 搜索 / 分类） |
+| GET | `/api/play?movie=&source=&episode=[&raw=1][&refresh=1]` | 播放 |
 | GET | `/api/seg?url=<b64>` | 媒体代理（Range 透传 + dart UA） |
-| GET | `/api/search?q=关键字` | 搜索片目 |
-| GET | `/api/token?movie=&source=&episode=` | 调试（返回原始 token，不调 parse_api） |
+| GET | `/api/catalog` | 片库列表（运维） |
+| GET | `/api/search?q=关键字` | 搜索（运维） |
+| GET | `/api/token?movie=&source=&episode=` | 调试（返回原始 token） |
 | POST | `/api/add-movie` | 导入 vod_info JSON |
-| DELETE/POST | `/api/delete/<id>` | 删除片目 |
-| POST/GET | `/api/cache/clear` | 清空解析缓存（Turso + 内存） |
-| GET | `/api/store` | 存储自检（Turso 连通性、库内片目数） |
-| GET | `/api/mogai` | **TVBox 魔改 API**（片库列表/详情/搜索） |
-| GET | `/api/appcms` | **苹果 CMS V10 API**（完全兼容标准资源搜索 API） |
-| GET | `/api/get?key=xxx` | **TVBox 配置**（base58 编码，TVBox 直连读取） |
+| DELETE | `/api/delete/<id>` | 删除片目 |
+| POST/GET | `/api/cache/clear` | 清空解析缓存 |
+| GET | `/api/store` | 存储自检 |
 
 ### /api/play 返回模式
 
@@ -152,48 +136,9 @@ Makers 控制台 → 项目 → **Direct Upload** → 选择整个文件夹。
 | `?raw=1` | 302 到原始直链（省函数流量，播放器需自备 dart UA） |
 | `?refresh=1` | 跳过缓存，强制重新解析 |
 
-## 📺 播放器用法
+## 🍎 苹果 CMS V10 API（唯一业务出口）
 
-```bash
-curl https://<域名>/api/catalog
-curl "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1"
-# m3u8 直接播放（分片自动重写走代理）：
-vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1"
-# 或 302 直链（播放器 UA 设为 dart）：
-vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1&raw=1"
-```
-
-## 📺 TVBox 用法
-
-### 方式一：直连配置（推荐）
-
-在 TVBox 中填入以下 URL 作为资源站地址：
-
-```
-https://<域名>/api/get?key=mmysapi
-```
-
-TVBox 会自动读取 base58 解码后的 JSON 配置，包含片库列表和详情接口。
-
-**环境变量配置：**
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `MYS_API_KEY` | `mmysapi` | 访问密钥 |
-| `MYS_CACHE_TIME` | `7200` | 缓存时间（秒） |
-| `MYS_API_NAME` | `mmys_api 资源` | 资源站显示名称 |
-
-### 方式二：手动添加魔改 API
-
-直接添加以下接口：
-
-- **列表**: `https://<域名>/api/mogai`
-- **详情**: `https://<域名>/api/mogai?ids=<vod_id>`
-- **搜索**: `https://<域名>/api/mogai?wd=<关键字>`
-
-## 🍎 苹果 CMS V10 API 用法
-
-完全兼容苹果 CMS V10 标准资源搜索 API 格式，支持任意支持该格式的 CMS 或播放器。
+完全兼容苹果 CMS V10 标准资源搜索 API，任意支持该格式的 CMS / 播放器都能直连。
 
 ### 端点
 
@@ -203,14 +148,14 @@ TVBox 会自动读取 base58 解码后的 JSON 配置，包含片库列表和详
 | `GET /api/appcms?ids=<vod_id>` | 单片详情 |
 | `GET /api/appcms?wd=<关键字>` | 搜索 |
 | `GET /api/appcms?class_id=<id>` | 按分类筛选 |
-| `GET /api/appcms?categories=1` | 获取分类列表 |
+| `GET /api/appcms?categories=1` | 分类列表 |
 | `GET /api/appcms?page=&limit=` | 分页参数 |
 
 ### 格式说明
 
-**vod_play_from**: 播放源名称，多个用 `###` 分隔
+**vod_play_from**：播放源名称，多个用 `###` 分隔
 
-**vod_play_url**: 播放地址
+**vod_play_url**：播放地址
 - 多源用 `###` 分隔
 - 源内多集用 `$$$` 分隔
 - 每集格式：`名称$URL`
@@ -261,6 +206,17 @@ curl "https://<域名>/api/appcms?categories=1"
 }
 ```
 
+## 📺 播放器用法
+
+```bash
+curl https://<域名>/api/catalog
+curl "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1"
+# m3u8 直接播放（分片自动重写走代理）：
+vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1"
+# 或 302 直链（播放器 UA 设为 dart）：
+vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1&raw=1"
+```
+
 ## ➕ 新增片目
 
 **方式一：运行时导入（推荐，免重新部署）**
@@ -271,20 +227,18 @@ curl -X POST https://<域名>/api/add-movie \
   -d @detail.json
 ```
 
-配置了 Turso 环境变量后，`POST /api/add-movie` 直接写入 Turso——**跨实例、跨重部署持久化**。
+配置了 Turso 后，`POST /api/add-movie` 直接写入 Turso —— **跨实例、跨重部署持久化**。
 
 **方式二：本地导入 + 重建内嵌 + 部署**
 
 ```bash
-python3 tools/import_detail.py detail.json       # 更新 data/catalog.json
-python3 tools/build_catalog_data.py              # 重建 lib/catalog_data.js
-node tools/init_turso.mjs                        # 同步 Turso（如果配置了）
-edgeone makers deploy -n mmys-api                # 重新部署
+# 编辑 data/catalog.json → 重新部署
+edgeone makers deploy -n mmys-api
 ```
 
 ## ⚙️ Turso 协议细节
 
-本版使用 **HANA pipeline 协议**（`POST /v2/pipeline`），而非旧版 `POST /v2/turso/stmts`：
+使用 **HANA pipeline 协议**（`POST /v2/pipeline`），非旧版 `POST /v2/turso/stmts`：
 
 - **类型化参数**：int/float/str/null/blob 五种类型编码，全 SQL 参数化
 - **批处理**：`executeMany` 一个 pipeline 发多条 SQL，减 HTTP 往返
@@ -294,17 +248,13 @@ edgeone makers deploy -n mmys-api                # 重新部署
 ## 🧪 冒烟测试
 
 ```bash
-# Node 端（98 项）
-node tools/smoke_test.mjs
-
-# Python 端
-bash tools/smoke_test.sh
+node tools/smoke_test.mjs        # 87 项
 ```
 
 ## ⚠️ 注意事项
 
-- **函数执行时长**：默认 `/api/play` 经函数代理拉流，长视频如遇平台时长限制，用 `?raw=1`（302 直链，不经函数，需播放器 UA 设为 `dart`）
-- **内嵌片库**：`lib/catalog_data.js` 由 `tools/build_catalog_data.py` 自动生成，Turso 不可用时作为兜底；内含 2 部片目（305048 为爱正名、308179 法医秦明之龙番往事）共 135 集
+- **函数执行时长**：`/api/play` 经函数代理拉流，长视频如遇平台时长限制，用 `?raw=1`（302 直链，不经函数，需播放器 UA 设为 `dart`）
+- **内嵌片库**：`edge-functions/lib/catalog_data.js` 是代码兜底；内含 2 部片目（305048 为爱正名、308179 法医秦明之龙番往事）共 135 集
 - **本项目无认证**：公网部署需自行加前置（nginx / Cloudflare Access / reverse proxy Bearer）
-- 片库规模 = 已导入详情包的片目数；要"全库任意搜索/详情"需逆向 App 请求加密（线索 `appsecretkey168`，见 mmys.md 路线 B）
+- 片库规模 = 已导入详情包的片目数；全库任意搜索/详情需逆向 App 请求加密（线索 `appsecretkey168`，见 mmys.md 路线 B）
 - 本项目仅限个人学习研究抓包/反代技术，请遵守相关平台服务条款与版权边界

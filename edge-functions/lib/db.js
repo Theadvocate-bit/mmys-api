@@ -1,13 +1,9 @@
-// lib/db.js — Turso client (HANA pipeline protocol) + movie CRUD + parse cache
-// + 3-level fallback (Turso → in-memory overlay → embedded catalog_data.js).
+// edge-functions/lib/db.js — Turso client (HANA pipeline protocol)
+// + movie CRUD + parse cache + 3-level fallback
+// (Turso → in-memory overlay → embedded catalog_data.js).
 // Zero external dependencies; uses global fetch() + DecompressionStream.
-//
-// Migration from v0.2:
-//   • v0.2: POST /v2/turso/stmts (old API, no params, no persistence)
-//   • v0.3: POST /v2/pipeline (HANA protocol, typed params, batch,
-//            persistent parse_cache, 3-level fallback, backoff, gzip)
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 
 import { EMBEDDED_CATALOG } from "./catalog_data.js";
 
@@ -16,12 +12,11 @@ import { EMBEDDED_CATALOG } from "./catalog_data.js";
 // ---------------------------------------------------------------------------
 
 export function getDb(env) {
-  const rawUrl = (env.TURSO_DATABASE_URL || env.TURSO_URL || "").trim();
-  const token = (env.TURSO_AUTH_TOKEN || env.TURSO_TOKEN || "").trim();
+  const rawUrl = (env.TURSO_DATABASE_URL || "").trim();
+  const token = (env.TURSO_AUTH_TOKEN || "").trim();
   if (!rawUrl || !token) {
     return {
-      error:
-        "TURSO_DATABASE_URL/TURSO_AUTH_TOKEN (or TURSO_URL/TURSO_TOKEN) env vars missing",
+      error: "TURSO_DATABASE_URL/TURSO_AUTH_TOKEN env vars missing",
     };
   }
   let url = rawUrl;

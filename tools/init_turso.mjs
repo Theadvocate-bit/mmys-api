@@ -3,7 +3,6 @@
 //
 // Usage:
 //   TURSO_DATABASE_URL=https://xxx.turso.io TURSO_AUTH_TOKEN=turso_xxx node tools/init_turso.mjs
-//   (also accepts TURSO_URL / TURSO_TOKEN for backwards compat)
 
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -12,15 +11,14 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = resolve(__dirname, "../schema.sql");
 
-let url = (process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || "").trim();
-const token = (process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || "").trim();
+const url0 = (process.env.TURSO_DATABASE_URL || "").trim();
+const token = (process.env.TURSO_AUTH_TOKEN || "").trim();
 
-if (!url || !token) {
-  console.error(
-    "ERROR: set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (or TURSO_URL + TURSO_TOKEN)"
-  );
+if (!url0 || !token) {
+  console.error("ERROR: set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN");
   process.exit(1);
 }
+let url = url0;
 
 // Auto-convert libsql:// or turso:// to https://
 if (url.startsWith("libsql://")) url = "https://" + url.slice(9);
