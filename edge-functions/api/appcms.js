@@ -12,10 +12,16 @@
 //   GET /api/appcms?ac=detail&ids=...  → 详情模式（83 字段/项）
 //   GET /api/appcms?text=xxx           → wd 的别名
 //
-// 在线搜索（减少 Turso 依赖）：
+// 在线数据源（减少 Turso 依赖）：
 //   设置 env.MYS_SEARCH_UPSTREAM="http://ffzy5.tv/api.php/provide/vod"（任意苹果 CMS V10 采集源）
-//   配置后 wd 搜索会先透传到该采集源，命中即返回；失败或空结果才回落本地。
-//   本地（Turso + 内嵌）作为兜底缓存。
+//   配置后**全部请求**（列表 / 搜索 / 详情）优先透传到上游；
+//   上游失败/空结果 → 静默回落本地（Turso + 内嵌）。
+//   未配置 → 完全走本地。
+//
+// 播放链接差异：
+//   上游详情返回上游自己的 vod_play_url（如 ffzy5.tv 的 vip.ffzy-play10.com/share/...）
+//   本地详情返回自己的 /api/play 直连（parse_api 解析的新鲜直链）
+//   完全线上模式下用户会拿到上游播放链接。
 //
 // 搜索字段（本地兜底策略，名称优先）：
 //   主：vod_name（名称）/ vod_en（拼音）
@@ -123,19 +129,20 @@ export async function onRequest(context) {
   try {
     const origin = new URL(request.url).origin;
 
-    // ---- 在线搜索优先：wd 有值 + 配置了 upstream + 非详情模式 ----
-    // 详情模式走本地（本地有 vod_play_url 播放链接，upstream 通常无）
-    if (wd && !wantDetail) {
+    // ---- 在线数据源优先：配置了 MYS_SEARCH_UPSTREAM → 全部请求透传 ----
+    // 透传 wd / ac / ids / class_id / page / limit 等所有参数。
+    // 上游失败/空结果 → 静默回落本地。
+    {
       const cfg = getConfig(env);
       if (cfg.searchUpstream) {
         const up = await fetchFromUpstream(env, cfg.searchUpstream, q);
         if (up.ok) {
-          // 用本项目的 class 数组替换 upstream 的（保持 8 类顶级导航）
+          // class 数组保持本项目的 mmys.app 8 类导航（不采用上游的 31 类）
           const all = await getAllMovies(env);
           const classList = getAllCategories(all);
           return json({
             code: 1,
-            msg: "数据列表",
+            msg: wantDetail ? "数据详情" : "数据列表",
             page: up.data.page,
             pagecount: up.data.pagecount,
             limit: Number(up.data.limit) || limit,
@@ -145,7 +152,7 @@ export async function onRequest(context) {
             upstream: up.data.upstream,
           });
         }
-        // 上游失败/空结果 → 继续走本地搜索
+        // 上游失败/空结果 → 继续走本地
       }
     }
 

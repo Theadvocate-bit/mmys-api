@@ -473,13 +473,15 @@ const cfgNoUp = getConfig({});
 assertEq(cfgNoUp.searchUpstream, "", "无 upstream → 本地搜索兜底");
 
 // 上游搜索核心逻辑验证（不实际联网，只验证条件判断）
-function shouldUseUpstream({ wd, wantDetail, cfg }) {
-  return Boolean(wd && !wantDetail && cfg.searchUpstream);
+// 新行为：配置了 upstream 就透传（列表/搜索/详情全部），不再区分 wd 或 detail
+function shouldUseUpstream({ cfg }) {
+  return Boolean(cfg.searchUpstream);
 }
-assertEq(shouldUseUpstream({ wd: "火影", wantDetail: false, cfg: { searchUpstream: "http://x" } }), true, "wd + 无 detail + 有 upstream → 用上游");
-assertEq(shouldUseUpstream({ wd: "", wantDetail: false, cfg: { searchUpstream: "http://x" } }), false, "无 wd → 不用上游");
-assertEq(shouldUseUpstream({ wd: "火影", wantDetail: true, cfg: { searchUpstream: "http://x" } }), false, "detail 模式 → 不用上游（本地有播放链接）");
-assertEq(shouldUseUpstream({ wd: "火影", wantDetail: false, cfg: { searchUpstream: "" } }), false, "无 upstream 配置 → 不用上游");
+assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream → 透传（全部请求）");
+assertEq(shouldUseUpstream({ cfg: { searchUpstream: "" } }), false, "无 upstream → 本地");
+assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream + 有 wd → 透传");
+assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream + detail → 透传（拿上游播放链接）");
+assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream + 无 wd 列表 → 透传");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -40,9 +40,9 @@ curl -X POST https://<部署域名>/api/add-movie -d @detail.json
 node tools/smoke_test.mjs
 ```
 
-### 在线搜索（减少 Turso 依赖）
+### 在线数据源（减少 Turso 依赖）
 
-配置 `MYS_SEARCH_UPSTREAM` 环境变量指向任意**苹果 CMS V10 采集源**，`wd` 搜索会优先透传，本地作为兜底。
+配置 `MYS_SEARCH_UPSTREAM` 环境变量指向任意**苹果 CMS V10 采集源**，**全部请求**（列表 / 搜索 / 详情）优先透传到上游，上游失败/空结果静默回落本地。
 
 ```bash
 # 任选一个苹果 CMS V10 采集源
@@ -50,12 +50,20 @@ export MYS_SEARCH_UPSTREAM="http://ffzy5.tv/api.php/provide/vod"
 ```
 
 **行为**：
-- `wd=xxx` + 非 detail 模式 → 先透传到上游；上游返回空/失败 → 回落本地（Turso + 内嵌）
-- 详情模式（`ac=detail`）→ 直接走本地（本地有 `vod_play_url` 播放链接，上游通常无）
-- 列表/分类浏览（无 `wd`）→ 直接走本地（这是你的片库）
-- 超时 8s（可通过 `MYS_PARSE_TIMEOUT` 调整）
 
-**注意**：上游返回的 `type_id` 是上游自己的编号（如 ffzy5.tv 用 30=日韩动漫），与 mmys.app 8 类不一致。需要 mmys.app 一致 type_id 时，配置一个 mmys.app 采集源。
+| 场景 | 数据源 |
+|---|---|
+| 配置 upstream + 任意请求 | 上游优先，失败/空结果回落本地 |
+| 未配置 upstream | 全部本地（Turso + 内嵌 3 部） |
+| 上游超时 | 8s 超时静默回落 |
+
+**完全线上模式**：不配 Turso + 配 upstream → 完全走线上，Turso 完全不使用。本地 `add-movie` 仍可叠加私有片库到 Turso（可选）。
+
+**播放链接差异**：
+- 上游详情返回上游自己的 `vod_play_url`（如 ffzy5.tv 的 `vip.ffzy-play10.com/share/...` 短链，需二次解析）
+- 本地详情返回自己的 `/api/play` 直连（`parse_api` 解析的新鲜直链）
+
+**type_id 差异**：上游返回上游自己的编号（如 ffzy5.tv 用 30=日韩动漫），与 mmys.app 8 类导航不一致。`class` 数组保持 mmys.app 8 类。需要 type_id 也一致时，配置一个 mmys.app 采集源。
 
 ## 🚀 部署（EdgeOne Makers 三选一）
 
