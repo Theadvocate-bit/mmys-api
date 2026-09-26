@@ -12,15 +12,12 @@
 //   GET /api/appcms?ac=detail&ids=...  → 详情模式（83 字段/项）
 //   GET /api/appcms?text=xxx           → wd 的别名
 //
-// 在线数据源（减少 Turso 依赖）：
-//   订阅系统：base58 编码的 JSON 配置，包含 18 个苹果 CMS V10 采集源
-//   默认订阅：https://text.nalinali.qzz.io/api/get?key=moontvsub
+// 在线数据源（内置订阅源）：
+//   内置 16 个苹果 CMS V10 采集源（从 https://text.nalinali.qzz.io/api/get?key=moontvsub 获取）
 //   默认源：mmys（猫猫影视，mmys.app 兼容 8 类导航）
 //
-// 环境变量：
-//   MYS_SUBSCRIPTION_URL  订阅链接（默认 https://text.nalinali.qzz.io/api/get?key=moontvsub）
-//   MYS_DEFAULT_SOURCE    默认采集源 key（默认 mmys）
-//   MYS_SEARCH_UPSTREAM   直接指定上游 URL（覆盖订阅配置）
+// 环境变量（可选）：
+//   MYS_SEARCH_UPSTREAM  直接指定上游 URL（覆盖内置订阅源）
 //
 // 行为：
 //   获取上游 URL → 透传全部请求 → 失败/空结果回落本地
@@ -44,7 +41,7 @@
 //   • vod_play_url  分隔：源间 '$$$'，源内集 '#', 每集 'name$url'
 //   • vod_play_server 每源占位 "no"（与 mmys.app 一致）
 
-import { getDb, getConfig, getAllMovies, getMovie, getUpstreamUrl } from "../lib/db.js";
+import { getDb, getConfig, getAllMovies, getMovie, getUpstreamUrl, getSourceUrl } from "../lib/db.js";
 import {
   vodToListItem,
   vodToDetail,
@@ -133,11 +130,11 @@ export async function onRequest(context) {
   try {
     const origin = new URL(request.url).origin;
 
-    // ---- 在线数据源优先：获取上游 URL（订阅配置或环境变量）----
+    // ---- 在线数据源：内置订阅源或环境变量指定 ----
     // 透传 wd / ac / ids / class_id / page / limit 等所有参数。
     // 上游失败/空结果 → 静默回落本地。
     {
-      const upstreamUrl = await getUpstreamUrl(env);
+      const upstreamUrl = getUpstreamUrl(env);
       if (upstreamUrl) {
         const up = await fetchFromUpstream(env, upstreamUrl, q);
         if (up.ok) {

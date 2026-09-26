@@ -456,43 +456,45 @@ assertEq(searchBy("qihuan").length, 0, "wd=qihuan 未命中（拼音不在字段
 // 空 wd 返回全部
 assertEq(searchBy("").length, allVods.length, "wd= 空返回全部");
 
-// --- 订阅系统：getConfig + 上游获取 ---
+// --- 内置订阅源：getConfig + 上游获取 ---
 console.log("\nSubscription system:");
-const { getUpstreamUrl, fetchSubscription } = await import("../edge-functions/lib/db.js");
+const { getUpstreamUrl, getSourceUrl, getAllSources, SUBSCRIPTION_SOURCES, DEFAULT_SOURCE } = await import("../edge-functions/lib/db.js");
 
-// getConfig 解析订阅配置
+// getConfig 解析
 const cfgDefault = getConfig({});
-assertEq(cfgDefault.subscriptionUrl, "https://text.nalinali.qzz.io/api/get?key=moontvsub", "默认订阅 URL");
-assertEq(cfgDefault.defaultSource, "mmys", "默认采集源");
 assertEq(cfgDefault.searchUpstream, "", "searchUpstream 空");
 
-const cfgCustom = getConfig({ MYS_SUBSCRIPTION_URL: "https://custom.example.com/sub", MYS_DEFAULT_SOURCE: "ffzy" });
-assertEq(cfgCustom.subscriptionUrl, "https://custom.example.com/sub", "自定义订阅 URL");
-assertEq(cfgCustom.defaultSource, "ffzy", "自定义采集源");
+const cfgCustom = getConfig({ MYS_SEARCH_UPSTREAM: "http://ffzy5.tv/api.php/provide/vod" });
+assertEq(cfgCustom.searchUpstream, "http://ffzy5.tv/api.php/provide/vod", "直接指定上游");
 
-const cfgDirect = getConfig({ MYS_SEARCH_UPSTREAM: "http://ffzy5.tv/api.php/provide/vod" });
-assertEq(cfgDirect.searchUpstream, "http://ffzy5.tv/api.php/provide/vod", "直接指定上游");
+// SUBSCRIPTION_SOURCES 内置配置
+assert(Object.keys(SUBSCRIPTION_SOURCES).length >= 10, "内置至少 10 个采集源");
+assert(SUBSCRIPTION_SOURCES.mmys !== undefined, "包含 mmys 源");
+assert(SUBSCRIPTION_SOURCES.ffzy !== undefined, "包含 ffzy 源");
+assertEq(DEFAULT_SOURCE, "mmys", "默认源是 mmys");
+
+// getSourceUrl
+const mmysUrl = getSourceUrl("mmys");
+assertEq(mmysUrl, "https://mmys.nalinali.qzz.io/api/appcms", "mmys 源 URL 正确");
+
+const ffzyUrl = getSourceUrl("ffzy");
+assertEq(ffzyUrl, "http://ffzy5.tv/api.php/provide/vod", "ffzy 源 URL 正确");
+
+const unknownUrl = getSourceUrl("unknown");
+assertEq(unknownUrl, null, "未知源返回 null");
+
+// getAllSources
+const allSources = getAllSources();
+assert(Object.keys(allSources).length >= 10, "getAllSources 返回所有源");
 
 // getUpstreamUrl 优先级测试
 // 1. searchUpstream 优先
-const url1 = await getUpstreamUrl({ MYS_SEARCH_UPSTREAM: "http://direct.example.com/api" });
+const url1 = getUpstreamUrl({ MYS_SEARCH_UPSTREAM: "http://direct.example.com/api" });
 assertEq(url1, "http://direct.example.com/api", "searchUpstream 优先");
 
-// 2. 订阅配置（网络可能不可用，使用本地默认）
-const url2 = await getUpstreamUrl({});
-assert(url2 !== null, "订阅配置返回上游 URL");
-assert(url2.startsWith("https://"), "默认上游 URL 以 https:// 开头");
-
-// 3. 无配置返回本地默认（fallback）
-const url3 = await getUpstreamUrl({ MYS_SUBSCRIPTION_URL: "", MYS_SEARCH_UPSTREAM: "" });
-assert(url3 !== null, "无配置返回本地默认上游");
-assert(url3.startsWith("https://"), "本地默认上游 URL 有效");
-
-// fetchSubscription 返回默认配置
-const sub = await fetchSubscription({ MYS_SUBSCRIPTION_URL: "" });
-assert(sub !== null, "fetchSubscription 返回配置");
-assert(sub.apiSite !== null, "订阅配置包含 apiSite");
-assert(Object.keys(sub.apiSite).length > 0, "订阅配置有多个采集源");
+// 2. 默认返回内置订阅源
+const url2 = getUpstreamUrl({});
+assertEq(url2, "https://mmys.nalinali.qzz.io/api/appcms", "默认返回 mmys 源");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

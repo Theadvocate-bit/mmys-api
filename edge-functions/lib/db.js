@@ -33,144 +33,71 @@ export function getConfig(env) {
     cacheTtl: parseInt(env.MYS_CACHE_TTL || "1800", 10), // seconds
     uaApp: env.MYS_UA_APP || "Dart/3.13 (dart:io)",
     uaPlayer: env.MYS_UA_PLAYER || "dart",
-    // 订阅链接（base58 编码的 JSON 配置）
-    // 默认：https://text.nalinali.qzz.io/api/get?key=moontvsub
-    subscriptionUrl: (env.MYS_SUBSCRIPTION_URL || "https://text.nalinali.qzz.io/api/get?key=moontvsub").trim(),
-    // 默认使用的采集源 key（从订阅配置中选择）
-    // 默认：mmys（猫猫影视，mmys.app 兼容）
-    defaultSource: (env.MYS_DEFAULT_SOURCE || "mmys").trim(),
-    // 直接指定上游 URL（覆盖订阅配置）
-    // 设置后忽略订阅，直接使用此 URL
+    // 直接指定上游 URL（覆盖内置订阅源）
+    // 设置后忽略内置订阅，直接使用此 URL
     searchUpstream: (env.MYS_SEARCH_UPSTREAM || "").trim(),
   };
 }
 
 // ---------------------------------------------------------------------------
-// 订阅系统：在线获取 + 本地 fallback
+// 内置订阅源配置（从 https://text.nalinali.qzz.io/api/get?key=moontvsub 获取）
+// 无需设置环境变量，开箱即用
 // ---------------------------------------------------------------------------
 
-// 默认订阅配置（当无法从在线获取时使用）
-// 来源：https://text.nalinali.qzz.io/api/get?key=moontvsub
-const DEFAULT_SUBSCRIPTION = {
-  cache_time: 7200,
-  api_site: {
-    mmys: { name: "猫猫影视", api: "https://mmys.nalinali.qzz.io/api/appcms" },
-    ffzy: { name: "非凡影视", api: "http://ffzy5.tv/api.php/provide/vod", detail: "http://ffzy5.tv" },
-    dyttzy: { name: "电影天堂资源", api: "http://caiji.dyttzyapi.com/api.php/provide/vod", detail: "http://caiji.dyttzyapi.com" },
-    ruyi: { name: "如意资源", api: "http://cj.rycjapi.com/api.php/provide/vod" },
-    bfzy: { name: "暴风资源", api: "https://bfzyapi.com/api.php/provide/vod" },
-    zy360: { name: "360资源", api: "https://360zy.com/api.php/provide/vod" },
-    jisu: { name: "极速资源", api: "https://jszyapi.com/api.php/provide/vod", detail: "https://jszyapi.com" },
-    mdzy: { name: "魔都资源", api: "https://www.mdzyapi.com/api.php/provide/vod" },
-    zuid: { name: "最大资源", api: "https://api.zuidapi.com/api.php/provide/vod" },
-    ikun: { name: "iKun资源", api: "https://ikunzyapi.com/api.php/provide/vod" },
-  },
+export const SUBSCRIPTION_SOURCES = {
+  mmys: { name: "猫猫影视", api: "https://mmys.nalinali.qzz.io/api/appcms" },
+  ffzy: { name: "非凡影视", api: "http://ffzy5.tv/api.php/provide/vod", detail: "http://ffzy5.tv" },
+  dyttzy: { name: "电影天堂资源", api: "http://caiji.dyttzyapi.com/api.php/provide/vod", detail: "http://caiji.dyttzyapi.com" },
+  ruyi: { name: "如意资源", api: "http://cj.rycjapi.com/api.php/provide/vod" },
+  bfzy: { name: "暴风资源", api: "https://bfzyapi.com/api.php/provide/vod" },
+  zy360: { name: "360资源", api: "https://360zy.com/api.php/provide/vod" },
+  jisu: { name: "极速资源", api: "https://jszyapi.com/api.php/provide/vod", detail: "https://jszyapi.com" },
+  mdzy: { name: "魔都资源", api: "https://www.mdzyapi.com/api.php/provide/vod" },
+  zuid: { name: "最大资源", api: "https://api.zuidapi.com/api.php/provide/vod" },
+  ikun: { name: "iKun资源", api: "https://ikunzyapi.com/api.php/provide/vod" },
+  lzi: { name: "量子资源站", api: "https://cj.lziapi.com/api.php/provide/vod" },
+  hhzy: { name: "豪华资源", api: "https://hhzyapi.com/api.php/provide/vod" },
+  lzcj: { name: "量子采集", api: "https://cj.lzcaiji.com/api.php/provide/vod" },
+  hongniu: { name: "红牛资源", api: "https://www.hongniuzy2.com/api.php/provide/vod" },
+  fangzy: { name: "非凡采集", api: "https://api.ffzyapi.com/api.php/provide/vod" },
 };
 
-/**
- * 获取订阅配置
- * 优先从在线获取，失败则使用本地默认配置
- */
-export async function fetchSubscription(env, timeoutMs = 10000) {
-  const cfg = getConfig(env);
-
-  // 尝试从在线获取
-  if (cfg.subscriptionUrl) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), timeoutMs);
-      const res = await fetch(cfg.subscriptionUrl, {
-        signal: ctrl.signal,
-        headers: { "User-Agent": "mmys-api/0.4" },
-      });
-      clearTimeout(t);
-      if (res.ok) {
-        const text = await res.text();
-        // 尝试 base58 解码
-        try {
-          const decoded = base58Decode(text.trim());
-          const json = JSON.parse(new TextDecoder().decode(decoded));
-          if (json && json.api_site) {
-            return { cacheTime: json.cache_time || 7200, apiSite: json.api_site };
-          }
-        } catch {
-          // base58 解码失败，尝试直接 JSON 解析
-          try {
-            const json = JSON.parse(text);
-            if (json && json.api_site) {
-              return { cacheTime: json.cache_time || 7200, apiSite: json.api_site };
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }
-    } catch {
-      // 网络错误，使用本地默认
-    }
-  }
-
-  // 返回本地默认配置
-  return { cacheTime: DEFAULT_SUBSCRIPTION.cache_time, apiSite: DEFAULT_SUBSCRIPTION.api_site };
-}
+// 默认使用的采集源 key
+export const DEFAULT_SOURCE = "mmys";
 
 /**
- * Base58 解码（Bitcoin 标准）
+ * 获取上游 URL（优先级：searchUpstream > 内置订阅源）
  */
-export function base58Decode(input) {
-  const B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  if (!input) return new Uint8Array(0);
-
-  // 处理前导 '1'（代表零字节）
-  let leadingZeros = 0;
-  for (const c of input) {
-    if (c === "1") leadingZeros++;
-    else break;
-  }
-
-  // 将 base58 转换为 BigInt
-  let num = 0n;
-  for (const char of input) {
-    const idx = B58_ALPHABET.indexOf(char);
-    if (idx === -1) throw new Error(`Invalid base58 character: ${char}`);
-    num = num * 158n + BigInt(idx);
-  }
-
-  // 转换为字节数组
-  const bytes = [];
-  while (num > 0n) {
-    bytes.unshift(Number(num & 0xffn));
-    num >>= 8n;
-  }
-
-  // 添加前导零
-  for (let i = 0; i < leadingZeros; i++) {
-    bytes.unshift(0);
-  }
-
-  return new Uint8Array(bytes);
-}
-
-/**
- * 获取上游 URL（优先级：searchUpstream > 订阅配置 > 本地默认）
- */
-export async function getUpstreamUrl(env) {
+export function getUpstreamUrl(env) {
   const cfg = getConfig(env);
 
   // 1. 直接指定上游
   if (cfg.searchUpstream) return cfg.searchUpstream;
 
-  // 2. 从订阅配置选择
-  const sub = await fetchSubscription(env);
-  if (sub && sub.apiSite) {
-    const source = sub.apiSite[cfg.defaultSource];
-    if (source && source.api) return source.api;
-    // fallback: 第一个可用源
-    const keys = Object.keys(sub.apiSite);
-    if (keys.length > 0) return sub.apiSite[keys[0]].api;
-  }
+  // 2. 使用内置订阅源的默认源
+  const source = SUBSCRIPTION_SOURCES[DEFAULT_SOURCE];
+  if (source && source.api) return source.api;
+
+  // 3. fallback: 第一个可用源
+  const keys = Object.keys(SUBSCRIPTION_SOURCES);
+  if (keys.length > 0) return SUBSCRIPTION_SOURCES[keys[0]].api;
 
   return null;
+}
+
+/**
+ * 获取指定采集源的 URL
+ */
+export function getSourceUrl(sourceKey) {
+  const source = SUBSCRIPTION_SOURCES[sourceKey];
+  return source ? source.api : null;
+}
+
+/**
+ * 获取所有采集源配置
+ */
+export function getAllSources() {
+  return SUBSCRIPTION_SOURCES;
 }
 
 // ---------------------------------------------------------------------------
