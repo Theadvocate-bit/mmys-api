@@ -1,6 +1,6 @@
 // edge-functions/api/appcms.js — GET /api/appcms
-// 苹果 CMS V10 API 格式，严格对齐 /api.php/provide/vod 规范
-// （参考：hongniuzy2 / bfzy / dyttzy 三家标准源）
+// 苹果 CMS V10 API 格式，严格对齐 ffzy5.tv 官方规范
+// （参考：https://ffzy5.tv/api.php/provide/vod）
 //
 // 用法:
 //   GET /api/appcms                    → 精简列表（8 字段/项）
@@ -13,10 +13,12 @@
 //
 // 响应格式：
 //   { code, msg, page, pagecount, limit, total, list, class }
-//   • class: [{type_id, type_name}, ...] 始终附带
+//   • class: [{type_id, type_pid, type_name}, ...] 全量 31 类（含层级）
 //   • list 项：默认 8 字段；?ac=detail 时为完整 83 字段
+//   • 详情字段 type_id_1 = 父类 id（顶级=0；国产剧 13 → 连续剧 2）
 //   • vod_play_from 分隔：list 用 ','；detail 用 '$$$'
 //   • vod_play_url  分隔：源间 '$$$'，源内集 '#', 每集 'name$url'
+//   • vod_play_server 每源占位 "no"（与 ffzy5.tv 一致）
 
 import { getDb, getAllMovies, getMovie } from "../lib/db.js";
 import {

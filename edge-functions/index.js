@@ -152,7 +152,7 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
 <tr><td class="mono">ac</td><td>string</td><td>动作。<code>detail</code> 返回详情；缺省返回 list；<code>list</code> 别名。</td></tr>
 <tr><td class="mono">page / pg</td><td>int</td><td>页码（默认 1）</td></tr>
 <tr><td class="mono">limit</td><td>int</td><td>每页数量（默认 20，最大 100）</td></tr>
-<tr><td class="mono">type_id / class_id</td><td>int</td><td>分类 id。<code>2</code>=连续剧，<code>30</code>=短剧。留空=全部。</td></tr>
+<tr><td class="mono">type_id / class_id</td><td>int</td><td>分类 id。<code>2</code>=连续剧，<code>13</code>=国产剧，<code>36</code>=短剧。留空=全部。</td></tr>
 <tr><td class="mono">wd</td><td>string</td><td>按片名模糊搜索（不区分大小写）</td></tr>
 <tr><td class="mono">ids</td><td>string</td><td><b>仅 ac=detail 有效</b>。逗号分隔多个 vod id，例如 <code>19067,308179</code></td></tr>
 </tbody>
@@ -163,7 +163,7 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
   <span class="k">"code"</span>: <span class="n">1</span>,
   <span class="k">"msg"</span>: <span class="s">"数据列表"</span>,
   <span class="k">"page"</span>: <span class="n">1</span>, <span class="k">"pagecount"</span>: <span class="n">1</span>, <span class="k">"limit"</span>: <span class="n">20</span>, <span class="k">"total"</span>: <span class="n">3</span>,
-  <span class="k">"class"</span>: [{<span class="k">"type_id"</span>:<span class="n">2</span>,<span class="k">"type_name"</span>:<span class="s">"连续剧"</span>},{<span class="k">"type_id"</span>:<span class="n">30</span>,<span class="k">"type_name"</span>:<span class="s">"短剧"</span>}],
+  <span class="k">"class"</span>: [{<span class="k">"type_id"</span>:<span class="n">2</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"连续剧"</span>},{<span class="k">"type_id"</span>:<span class="n">13</span>,<span class="k">"type_pid"</span>:<span class="n">2</span>,<span class="k">"type_name"</span>:<span class="s">"国产剧"</span>},{<span class="k">"type_id"</span>:<span class="n">36</span>,<span class="k">"type_pid"</span>:<span class="n">2</span>,<span class="k">"type_name"</span>:<span class="s">"短剧"</span>}, ...],
   <span class="k">"list"</span>: [
     <span class="c">// "id,tvod_name,tvod_img,tvod_short_intro,tvod_blurb,tvod_area,genre,vod_remarks"</span>
     <span class="s">"19067,师兄太稳健,https://xxx/cover.jpg,简介,概述,中国,动漫,10集"</span>
@@ -176,14 +176,16 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
   <span class="k">"class"</span>: [...],
   <span class="k">"list"</span>: [{
     <span class="c">// 83 字段，常用几个：</span>
-    <span class="k">"vod_id"</span>: <span class="s">"19067"</span>,
+    <span class="k">"vod_id"</span>: <span class="n">19067</span>,
+    <span class="k">"type_id"</span>: <span class="n">13</span>, <span class="k">"type_id_1"</span>: <span class="n">2</span>, <span class="k">"type_name"</span>: <span class="s">"国产剧"</span>,
     <span class="k">"vod_name"</span>: <span class="s">"师兄太稳健"</span>,
-    <span class="k">"vod_area"</span>: <span class="s">"中国"</span>,
-    <span class="k">"vod_year"</span>: <span class="s">"2025"</span>,
-    <span class="k">"vod_class"</span>: <span class="s">"动漫"</span>,
-    <span class="k">"vod_remarks"</span>: <span class="s">"10集"</span>,
-    <span class="k">"vod_play_from"</span>: <span class="s">"BBA,GGC,QQS,..."</span>,          <span class="c">// 源列表，逗号分隔</span>
-    <span class="k">"vod_play_url"</span>: <span class="s">"BBA$$$第1集$http://...#第2集$http://...$$$GGC$$$第1集$http://..."</span>
+    <span class="k">"vod_area"</span>: <span class="s">"大陆"</span>,
+    <span class="k">"vod_year"</span>: <span class="s">"2026"</span>,
+    <span class="k">"vod_class"</span>: <span class="s">"剧情,爱情"</span>,
+    <span class="k">"vod_remarks"</span>: <span class="s">"更新至第30集"</span>,
+    <span class="k">"vod_play_from"</span>: <span class="s">"BBA$$$GGC$$$QQS"</span>,          <span class="c">// $$$ 分隔源</span>
+    <span class="k">"vod_play_server"</span>: <span class="s">"no$$$no$$$no"</span>,
+    <span class="k">"vod_play_url"</span>: <span class="s">"第01集$/api/play?...$$$第01集$/api/play?...$$$..."</span>
     <span class="c">// $$$ 分隔源；# 分隔集；每集 name$url</span>
   }]
 }</pre>

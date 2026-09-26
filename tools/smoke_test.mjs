@@ -327,9 +327,28 @@ assertEq(filterByClass(testMovies, "").length, 4, "filterByClass empty filter = 
 
 // --- getAllCategories ---
 const cats = getAllCategories(testMovies);
-assert(cats.length >= 3, "getAllCategories returns entries");
+assert(cats.length === 31, "getAllCategories returns all 31 ffzy5.tv categories");
 assert(cats[0].type_id, "category has type_id");
 assert(typeof cats[0].type_name === "string", "category has type_name");
+assert(typeof cats[0].type_pid === "number", "category has type_pid");
+// 顶级分类 pid=0
+const topLevels = cats.filter((c) => c.type_pid === 0);
+assertEq(topLevels.length, 4, "4 top-level categories (电影片/连续剧/综艺片/动漫片)");
+assertEq(topLevels[0].type_name, "电影片", "top-level 1 = 电影片 (ffzy5.tv naming)");
+// 子分类 parent 反查
+const gdc = cats.find((c) => c.type_id === 13);
+assert(gdc, "category 13 国产剧 present");
+assertEq(gdc.type_name, "国产剧", "category 13 = 国产剧");
+assertEq(gdc.type_pid, 2, "category 13 pid = 2 连续剧");
+// 短剧 id=36（ffzy5.tv 规范，非旧 30）
+const dui = cats.find((c) => c.type_id === 36);
+assert(dui, "category 36 短剧 present (ffzy5.tv)");
+assertEq(dui.type_name, "短剧", "category 36 = 短剧");
+assertEq(dui.type_pid, 2, "category 36 pid = 2 连续剧");
+// 旧 id 30 现在是日韩动漫（ffzy5.tv）
+const old30 = cats.find((c) => c.type_id === 30);
+assertEq(old30.type_name, "日韩动漫", "old id 30 now = 日韩动漫 (ffzy5.tv)");
+assertEq(old30.type_pid, 4, "old id 30 pid = 4 动漫片");
 // sorted by type_id
 for (let i = 1; i < cats.length; i++) {
   assert(Number(cats[i].type_id) >= Number(cats[i - 1].type_id), "categories sorted");
@@ -346,14 +365,33 @@ assert(!realListItem.vod_play_from.includes("$$$"), "real list does not use $$$ 
 
 // Detail view of 305048
 const realCms = vodToDetail(realVod, origin);
+const sourceCount = Object.keys(realVod.sources).length;
 assert(realCms.vod_id === 305048, "real detail vod_id numeric");
 assert(realCms.vod_play_from.includes("$$$"), "real detail uses $$$ separator");
 assert(!realCms.vod_play_from.includes("###"), "real detail has no legacy ### in play_from");
 assert(realCms.vod_play_url.includes("$$$"), "real detail vod_play_url has $$$ source sep");
 assert(!realCms.vod_play_url.includes("###"), "real detail vod_play_url no legacy ###");
 
+// --- ffzy5.tv 分类规范对齐验证 ---
+// 三部片在 ffzy5.tv 均为国产剧（type_id=13），父类为连续剧（type_id_1=2）
+assertEq(realListItem.type_id, 13, "real list type_id = 13 (国产剧 ffzy5.tv)");
+assertEq(realListItem.type_name, "国产剧", "real list type_name = 国产剧 (ffzy5.tv)");
+assertEq(realCms.type_id, 13, "real detail type_id = 13");
+assertEq(realCms.type_id_1, 2, "real detail type_id_1 = 2 连续剧 (ffzy5.tv hierarchy)");
+assertEq(realCms.type_name, "国产剧", "real detail type_name = 国产剧");
+// 三部片一致
+for (const vid of ["305048", "308179", "19067"]) {
+  const v = EMBEDDED_CATALOG.vods[vid];
+  assertEq(Number(v.type_id), 13, `${vid} type_id = 13 (国产剧)`);
+  const det = vodToDetail(v, origin);
+  assertEq(det.type_id_1, 2, `${vid} type_id_1 = 2 连续剧`);
+}
+// vod_play_server 每源 "no"（对齐 ffzy5.tv）
+const serverParts = realCms.vod_play_server.split("$$$");
+assertEq(serverParts.length, sourceCount, "vod_play_server has one entry per source");
+assert(serverParts.every((p) => p === "no"), "vod_play_server all 'no' (ffzy5.tv convention)");
+
 // Test source count matches (all three views)
-const sourceCount = Object.keys(realVod.sources).length;
 const playFromListCount = realListItem.vod_play_from.split(",").length;
 assertEq(sourceCount, playFromListCount, "list play_from count matches");
 const playFromDetailCount = realCms.vod_play_from.split("$$$").length;
