@@ -490,6 +490,122 @@ direct url      → false   ✓（"https://..."）
 
 ---
 
+## Step E 记录：Frida 动态调试可行性分析（2026-09-26）
+
+**目标**：用 Frida hook `javax.crypto.Cipher` 或 Dart 层加密函数，运行时抓密钥。
+
+**环境检查**：
+
+| 组件 | 状态 | 说明 |
+|---|---|---|
+| Linux x86_64 主机 | ✅ | 本机可用 |
+| `/dev/kvm` 硬件虚拟化 | ❌ | **无**（虚拟机无 KVM） |
+| Android SDK | ❌ | 未安装 |
+| Android Studio / Emulator | ❌ | 需要 KVM 硬件虚拟化 |
+| Android 真机连接 | ❌ | 当前环境无设备 |
+| Frida client | ⚠️ | 可 pip 安装但需目标设备 |
+
+**结论**：**本机环境无法运行 Frida 动态调试**
+- 无 KVM → 无法运行 Android 模拟器
+- 无 Android 设备连接 → 无法直接调试
+- 需要用户提供具备 Frida 运行条件的 Android 环境
+
+**替代方案（需用户配合）**：
+
+### 方案 1：用户在自己设备运行 Frida
+
+1. 用户在自己 Android 手机上安装 mmys.apk
+2. 手机开启 USB 调试 + root（或用 Frida server 免 root 版）
+3. 用户提供 Frida 脚本（见下）+ 目标设备连接方式
+4. 用户执行抓包 + 抓密钥
+
+### 方案 2：用户提供 mmys.app 抓包 + Frida 输出
+
+如果用户能：
+- 在自己的手机/模拟器上运行 mmys.app
+- 用 Frida 抓 `Cipher.init()` 或 `SecretKeySpec` 的调用参数
+- 提供密钥/IV/密文的样本
+
+即可直接用于解密。
+
+### Frida 脚本模板（供用户提供设备时使用）
+
+```javascript
+// hook.js - 抓 AES-128-CBC 密钥
+Java.perform(() => {
+    // 方式 1：hook javax.crypto.Cipher.init（所有 AES 操作）
+    const Cipher = Java.use('javax.crypto.Cipher');
+    Cipher.init.overload('int', 'java.security.Key', 'java.security.spec.IvParameterSpec').implementation = function(mode, key, iv) {
+        console.log('[AES] mode=' + (mode===1?'ENCRYPT':'DECRYPT'));
+        console.log('[AES] key=' + (key instanceof Java.use('javax.crypto.spec.SecretKeySpec') 
+            ? key.getEncoded().map(b=>'0x'+(b&0xff).toString(16).padStart(2,'0')).join('') : 'unknown'));
+        console.log('[AES] iv=' + iv);
+        return this.init(mode, key, iv);
+    };
+    
+    // 方式 2：hook s.a.a()（maomao 核心加密）
+    const S = Java.use('s.a');
+    S.a.implementation = function(bytes, keyHex, ivStr) {
+        console.log('[s.a.a] key_hex=' + keyHex);
+        console.log('[s.a.a] iv_str=' + ivStr);
+        const result = this.a(bytes, keyHex, ivStr);
+        console.log('[s.a.a] result_len=' + result.length);
+        return result;
+    };
+});
+```
+
+### 后续步骤（如果用户能跑 Frida）
+
+1. 提供 Frida 输出（key/iv 值）
+2. 用 `s.a.a()` 逻辑 + 密钥解密 mmt.php 256B
+3. 集成到 `play.js`
+
+---
+
+## 最终结论：完整逆向受阻
+
+**已尝试的路线（5 条全走不通）**：
+
+| 路线 | 状态 | 原因 |
+|---|---|---|
+| Step 1: APK 静态资源扫描 | ❌ | 密钥不在明文资源里 |
+| Step 2: s.a.a() 复刻 + 330 组密钥候选 | ❌ | 密钥不在能静态推导的地方 |
+| Step C: config.bin XOR/暴力破解 | ❌ | 满熵加密，非简单 XOR |
+| Step A: 走明文源（已完成） | ✅ | 6 类源可用，加密源返回友好错误 |
+| Step B: radare2 反汇编 libapp.so | ❌ | Dart AOT 常量不可读，r2 分析超时 |
+| Step E: Frida 动态调试 | ⏸ | 本机无 Android 环境（无 KVM/设备） |
+
+**当前项目可用状态**：
+- ✅ 6 类明文解析源完全可用（BBA / Ace / IMDB / qsvip / bytedance / seven / mgtv 等）
+- ⚠️ Ksvideo 源加密（Dong 解析），返回友好错误提示
+- ⚠️ mmt.php 完整逆向需 Android 环境 + Frida 抓密钥
+
+**建议后续**：
+1. 部署当前版本到 EdgeOne Pages，先用起来
+2. 如果需要 Dong 解析源，用户提供具备 Frida 运行条件的 Android 环境
+3. 逆向成果（`s.a.a()` 实现、密钥下发机制、加密源检测）已完整文档化
+
+---
+
+## 归档
+
+**Git 提交历史**：
+- `b3b197a` docs: HANDOFF 更新 — Java 层加密核心定位
+- `992a820` feat(play): 加密源响应检测与友好错误提示
+- `8975e02` docs(handoff): Step A 完成记录
+- `6110aec` docs(handoff): Step B 完成 — radare2 反汇编结论
+
+**核心产物**：
+- `HANDOFF.md`（本文件）：完整逆向文档，约 500 行
+- `edge-functions/api/play.js`：新增 `isEncryptedResponse()` 检测
+- `mmys.md`：早期抓包分析报告
+- `data/catalog.json`：3893 部电影 + 解析 API 配置
+- `/tmp/libapp.so`：8MB Dart AOT 二进制
+- `/tmp/jadx_mmys/out/sources/s/a.java`：核心 AES 加解密函数
+
+---
+
 ## 变更记录
 
 | 日期 | 变更 | 操作者 |
@@ -505,6 +621,7 @@ direct url      → false   ✓（"https://..."）
 | 2026-09-26 | Step C: 尝试解 config.bin（满熵加密，非简单 XOR），55 个 libapp.so hex 密钥候选全部 0 命中 | Gloria |
 | 2026-09-26 | Step A: play.js 新增 isEncryptedResponse 检测，加密源返回友好错误；BBA/Ace/IMDB 等 6 类明文源可用 | Gloria |
 | 2026-09-26 | Step B: 安装 radare2 6.2.2 反汇编 libapp.so，3 个符号无密钥；Dart AOT 常量不可读；分析超时；路线走不通 | Gloria |
+| 2026-09-26 | Step E: 环境检查无 KVM/Android 设备，Frida 动态调试不可行；提供 Frida 脚本模板 + 5 条路线归档 | Gloria |
 
 ---
 
