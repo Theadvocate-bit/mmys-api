@@ -326,9 +326,12 @@ export async function getMovie(env, id) {
   } catch {}
   // 2) In-memory overlay
   if (_overlay.has(id)) return _overlay.get(id);
-  // 3) Embedded fallback (try raw id, then vod-${id})
+  // 3) Embedded fallback — 兼容 vod-1234 和 1234 两种 id 形式。
+  //    catalog 用数字 id 做 key（"19067"），前端/苹果 CMS 常传 vod- 前缀。
   const cat = EMBEDDED_CATALOG.vods || {};
   if (cat[id]) return cat[id];
+  const stripped = id.replace(/^vod-/, "");
+  if (stripped !== id && cat[stripped]) return cat[stripped];
   if (!id.startsWith("vod-") && cat[`vod-${id}`]) return cat[`vod-${id}`];
   return null;
 }
