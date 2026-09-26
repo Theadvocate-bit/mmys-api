@@ -137,7 +137,7 @@
 
 ---
 
-## 阶段 3：libzxprotect.so 逆向（待开始）
+## 阶段 3：libzxprotect.so 逆向（进行中）
 
 ### 分析现状
 
@@ -147,6 +147,58 @@
 | 加密算法 | AES-128-CBC（所有 body 是 16 字节块的倍数） |
 | 密钥生成 | 运行时动态生成，可能与设备信息绑定 |
 | `libNativeHelper.so` | `datadiv_decode` 函数，数据解密 |
+
+### 逆向进度
+
+**2026-09-26 启动逆向工程**
+
+- **APK 文件：** `mmys.apk`（28MB，用户提供）
+- **APK 结构分析：**
+  - `classes.dex`（8.9MB）+ `classes2.dex`（6.6MB）- Java/Kotlin 字节码
+  - `lib/arm64-v8a/libapp.so`（7.9MB）- Dart 内核快照
+  - `lib/arm64-v8a/libflutter.so`（11.7MB）- Flutter 引擎
+  - `lib/arm64-v8a/libdartjni.so`（131KB）- Dart JNI 桥接
+  - `lib/arm64-v8a/libumeng-spy.so`（398KB）- 友盟统计
+  - **重要发现：无 `libzxprotect.so`！** 加密逻辑在 Dart 代码中（编译进 `libapp.so`）
+  
+- **加密算法发现：**
+  - `AES/CBC/PKCS5PADDING` - AES-128-CBC 加密
+  - `Ljavax/crypto/Cipher` - Java Cipher 类
+  - `Ljavax/crypto/spec/SecretKeySpec` - 密钥规范
+  - `Ljavax/crypto/spec/IvParameterSpec` - IV 规范
+  - `package:flutter_curl_task/brilliantapple.dart` - HTTP 请求库
+  - `, buildSignature: ` - 签名构建函数
+  - `Bearer` - Bearer token 认证
+  
+- **Dart 内核快照提取：**
+  - `_kDartSnapshotData` 偏移：0x2c0
+  - `_kDartSnapshotText` 偏移：0x200000
+  - 快照大小：2,096,448 字节
+  - 已提取到 `dart_snapshot.bin`
+  
+- **发现的十六进制字符串（可能的密钥/哈希）：**
+  - `16328ec745228189cbccd25b99c2e3a8d6`（40 字符，SHA-1？）
+  - `30e4ca17ccb2f93fa9dcbc524efc8ad9eff1101c6849f39378bc4b94183c4bd72b5d64d2b07803680070b08ee8c973128e3ccb0ec8bcf856a88e8b5d4cf48abcfcf2610b6970fd9b50d8449b1b3074bf240931d2a1770b3d047cb19be8cf7a3e2a390fd3c51c09485c7191f4e3c856`（64 字符，SHA-256？）
+  - `a4fa1a9f4072c40c6afe4712b7ae6b9c7142f08f2a0827c24069daefa1`（48 字符）
+  - `ffffffffffffffffffffffffffffffff6c611070995ad10045841b09b761b893`（64 字符）
+  - 还有大量 16 字节 hex 字符串（AES-128 密钥候选）
+
+- **DEX 文件分析：**
+  - 类名已混淆（单字母命名）
+  - 包含标准 Android 加密库（`javax.crypto`）
+  - 无硬编码密钥（可能在 Dart 代码中）
+
+- **工具限制：**
+  - 无 Dart 反编译工具（`flutter_dart_decompiler` 不可用）
+  - 无 Ghidra/IDA Pro/radare2
+  - 仅有 `objdump`、`strings`、`readelf`
+  
+- **下一步：**
+  1. 安装 Dart 反编译工具（需要网络连接）
+  2. 反汇编 `libapp.so` 定位加密函数
+  3. 提取 AES 密钥和 IV
+  4. 在 Node.js 中复刻加密逻辑
+  5. 集成到 `appcms.js` 实现官方 API 直连
 
 ### 逆向路径
 

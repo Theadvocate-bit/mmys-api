@@ -18,3 +18,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# 逆向工程文件
+*.apk
+*.bin
