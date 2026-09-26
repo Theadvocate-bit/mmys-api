@@ -99,9 +99,9 @@ vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1"
 vlc "https://<域名>/api/play?movie=vod-305048&source=BBA&episode=1&raw=1"
 ```
 
-## 🍎 苹果 CMS V10 API（严格对齐 [ffzy5.tv](https://ffzy5.tv/api.php/provide/vod) 官方规范）
+## 🍎 苹果 CMS V10 API（严格对齐 [mmys.app](https://mmys.app) 官方客户端规范）
 
-任意支持苹果 CMS V10 的资源采集器/播放器可直接消费。
+抓包来源：`cos.hxx2023.cc/maomao.php/v7/logs` → `"导航列表"` 响应。任意支持苹果 CMS V10 的资源采集器/播放器可直接消费。
 
 ### 端点
 
@@ -128,7 +128,7 @@ GET /api/appcms?page=&limit=&wd=&class_id=&ids=&ac=detail&text=
   "pagecount": 1,
   "limit": 20,
   "total": 3,
-  "class": [{"type_id": 2, "type_pid": 0, "type_name": "连续剧"}, {"type_id": 13, "type_pid": 2, "type_name": "国产剧"}, ...],   // 全量 31 类（含层级）
+  "class": [{"type_id": 1, "type_pid": 0, "type_name": "电影"}, {"type_id": 2, "type_pid": 0, "type_name": "剧集"}, ...],  // 全量 8 类顶级导航
   "list": [ ... ]                     // 精简 8 字段 或 详情 83 字段
 }
 ```
@@ -139,8 +139,8 @@ GET /api/appcms?page=&limit=&wd=&class_id=&ids=&ac=detail&text=
 {
   "vod_id": 19067,
   "vod_name": "师兄太稳健",
-  "type_id": 13,
-  "type_name": "国产剧",
+  "type_id": 2,
+  "type_name": "剧集",
   "vod_en": "",
   "vod_time": "2026-09-25 20:00:15",
   "vod_remarks": "30集全",
@@ -155,8 +155,8 @@ GET /api/appcms?page=&limit=&wd=&class_id=&ids=&ac=detail&text=
 ```json
 {
   "vod_id": 19067,
-  "type_id": 13,           // 具体子类（13 = 国产剧）
-  "type_id_1": 2,          // 父类 id（2 = 连续剧；顶级 = 0）
+  "type_id": 2,          // 顶级 id（mmys.app 单级导航）
+  "type_id_1": 2,        // = type_id（mmys.app 无二级分类编号）
   "vod_name": "师兄太稳健",
   "vod_class": "奇幻,古装,电视,连续",
   "vod_pic": "https://...",
@@ -166,7 +166,7 @@ GET /api/appcms?page=&limit=&wd=&class_id=&ids=&ac=detail&text=
   "vod_play_from": "BBA$$$bytedance$$$youku$$$...",
   "vod_play_server": "no$$$no$$$no$$$...",
   "vod_play_url": "第01集$https://域名/api/play?...#第02集$https://域名/api/play?...$$$1$https://...",
-  "type_name": "国产剧"
+  "type_name": "剧集"
 }
 ```
 
@@ -178,34 +178,24 @@ GET /api/appcms?page=&limit=&wd=&class_id=&ids=&ac=detail&text=
 | `vod_play_from`（详情） | `$$$` | 源间 |
 | `vod_play_url` | `$$$` → `#` → `$` | 源间 → 集间 → 集名\|URL |
 
-`vod_play_server` 每源占位 `"no"`（与 ffzy5.tv 一致）。
+`vod_play_server` 每源占位 `"no"`（与 mmys.app 一致）。
 
 ### 分类字典
 
-内置 **31 类**，与 [ffzy5.tv](https://ffzy5.tv/api.php/provide/vod) 官方 `class` 数组完全一致，含父类层级（`type_pid`）：
+内置 **8 类顶级导航**，与 mmys.app 官方 `导航列表` 响应完全一致，单级结构（无二级分类编号，全部 `type_pid=0`）：
 
-| id | 名称 | type_pid | 名称 | type_pid |
-|---|---|---|---|---|
-| 1 | 电影片 | 0 | 13 | 国产剧 | 2 |
-| 2 | 连续剧 | 0 | 14 | 香港剧 | 2 |
-| 3 | 综艺片 | 0 | 15 | 韩国剧 | 2 |
-| 4 | 动漫片 | 0 | 16 | 欧美剧 | 2 |
-| 6 | 动作片 | 1 | 20 | 记录片 | 1 |
-| 7 | 喜剧片 | 1 | 21 | 台湾剧 | 2 |
-| 8 | 爱情片 | 1 | 22 | 日本剧 | 2 |
-| 9 | 科幻片 | 1 | 23 | 海外剧 | 2 |
-| 10 | 恐怖片 | 1 | 24 | 泰国剧 | 2 |
-| 11 | 剧情片 | 1 | 25 | 大陆综艺 | 3 |
-| 12 | 战争片 | 1 | 26 | 港台综艺 | 3 |
-| 34 | 伦理片 | 1 | 27 | 日韩综艺 | 3 |
-| 36 | 短剧 | 2 | 28 | 欧美综艺 | 3 |
-|  |  |  | 29 | 国产动漫 | 4 |
-|  |  |  | 30 | 日韩动漫 | 4 |
-|  |  |  | 31 | 欧美动漫 | 4 |
-|  |  |  | 32 | 港台动漫 | 4 |
-|  |  |  | 33 | 海外动漫 | 4 |
+| id | 名称 | 子筛选维度（通过查询参数过滤） |
+|---|---|---|
+| 1 | 电影 | class / area / lang / year / star / director / state / version |
+| 2 | 剧集 | class / area / lang / year / star / director / state / version |
+| 3 | 综艺 | class / area / lang / year / star |
+| 4 | 动漫 | class / area / lang / year / version |
+| 58 | 直播 | year |
+| 62 | 少儿 | year |
+| 63 | 短剧 | year |
+| 64 | 漫剧 | year |
 
-顶级（`type_pid=0`）：`1 电影片 / 2 连续剧 / 3 综艺片 / 4 动漫片`。详情响应里的 `type_id_1` 由 `type_pid` 派生（例：`type_id=13 国产剧` → `type_id_1=2 连续剧`）。
+子筛选（如"古装""科幻""国产""美国"）不是独立 `type_id`，而是官方客户端通过独立参数（`class=`/`area=`/`lang=`/`year=`）传给后端的标签，本 API 通过 `wd` 参数按 `vod_class` 模糊匹配实现等价过滤。
 
 ### 示例
 
@@ -219,10 +209,11 @@ curl "https://<域名>/api/appcms?ac=detail&ids=305048"
 # 搜索
 curl "https://<域名>/api/appcms?wd=法医"
 
-# 按分类筛选
-curl "https://<域名>/api/appcms?type_id=2"        # 连续剧（父类）
-curl "https://<域名>/api/appcms?class_id=13"      # 国产剧（子类）
-curl "https://<域名>/api/appcms?type_id=36"       # 短剧
+# 按分类筛选（8 类顶级导航 id）
+curl "https://<域名>/api/appcms?type_id=2"         # 剧集
+curl "https://<域名>/api/appcms?class_id=4"        # 动漫
+curl "https://<域名>/api/appcms?type_id=63"        # 短剧
+curl "https://<域名>/api/appcms?type_id=64"        # 漫剧
 ```
 
 ## ⚠️ 注意事项

@@ -1,11 +1,12 @@
 // edge-functions/lib/appcms_format.js — 苹果 CMS V10 API 格式化
 //
-// 严格对齐 ffzy5.tv 官方规范（https://ffzy5.tv/api.php/provide/vod）：
+// 严格对齐 mmys.app 官方客户端规范
+// （抓包来源：cos.hxx2023.cc/maomao.php/v7/logs → "导航列表" 响应）：
 //
 //   顶层：{ code, msg, page, pagecount, limit, total, list, class }
-//   class：[{ type_id, type_pid, type_name }, ...]，全量 31 类
-//     • type_pid=0 表示顶级（1 电影片 / 2 连续剧 / 3 综艺片 / 4 动漫片）
-//     • 子类 type_pid 指向父类 id
+//   class：[{ type_id, type_pid, type_name }, ...]，全量 8 类顶级
+//     • 全部 type_pid=0（mmys.app 无二级分类编号）
+//     • 8 类：1 电影 / 2 剧集 / 3 综艺 / 4 动漫 / 58 直播 / 62 少儿 / 63 短剧 / 64 漫剧
 //
 //   列表项（默认）：精简 8 字段
 //     { vod_id, vod_name, type_id, type_name, vod_en, vod_time,
@@ -13,23 +14,19 @@
 //     vod_play_from = "BBA,bytedance"     ← 逗号分隔
 //
 //   详情项（?ac=detail&ids=...）：83 字段
-//     type_id    = 具体子类 id（如 13 国产剧）
-//     type_id_1  = 父类 id（如 2 连续剧；顶级=0）
+//     type_id    = 顶级 id（1/2/3/4/58/62/63/64）
+//     type_id_1  = 顶级 id（mmys.app 单级导航，等于 type_id）
 //     vod_play_from = "BBA$$$bytedance"   ← $$$ 分隔
 //     vod_play_server = "no$$$no"         ← 每源占位 "no"
 //     vod_play_url  = "第01集$URL#第02集$URL$$$第01集$URL#第02集$URL"
 //                       ↑集间↑ ↑集名$URL↑  ↑源间↑
 //
 // 与旧格式的破坏性变更：
-//   • vod_play_from 分隔符 ###  → , / $$$
-//   • vod_play_url  源 ###  → $$$；集 $$$  → #
-//   • 详情结构 { data: {...} }  → { list: [{...}] }
-//   • 新增顶层 class 数组
-//   • 分类字典对齐 ffzy5.tv（31 类，含 type_pid 层级）
-//   • 详情新增 type_id_1（父类 id）字段
-//   • vod_play_server 占位从空串改为 "no"
-//   • 移除 categories=1 参数（class 数组已始终返回）
-//   • type_id / class_id 均可用作分类过滤
+//   • 分类字典从 ffzy5.tv 31 类扁平结构 → mmys.app 官方 8 类顶级导航
+//   • 短剧 id 从 36 (ffzy5.tv) → 63 (mmys.app)
+//   • 新增顶级分类：58 直播 / 62 少儿 / 64 漫剧
+//   • TYPE_PARENT 移除（mmys.app 无二级分类编号）
+//   • 详情 type_id_1 从"父类 id"改为"顶级 id（=type_id）"
 
 // 集内部分隔符（集名$URL）
 const EP_SEP = "#";
@@ -59,67 +56,42 @@ function getLetter(name) {
   return m ? m[0].toUpperCase() : "Z";
 }
 
-// 苹果 CMS V10 分类字典 — 完全对齐 ffzy5.tv 官方 31 类
-// 参见 https://ffzy5.tv/api.php/provide/vod 返回的 class 数组。
-// 顶级：1 电影片 / 2 连续剧 / 3 综艺片 / 4 动漫片
-// 子类通过 TYPE_PARENT 反向映射到顶级 ID（详情字段 type_id_1 由此派生）。
+// 苹果 CMS V10 分类字典 — 完全对齐 mmys.app 官方 8 类顶级导航
+// 抓包来源：POST /maomao.php/v7/logs → msg="导航列表"
+//   [{ type_id: 1,  type_name: "电影" },
+//    { type_id: 2,  type_name: "剧集" },
+//    { type_id: 3,  type_name: "综艺" },
+//    { type_id: 4,  type_name: "动漫" },
+//    { type_id: 58, type_name: "直播" },
+//    { type_id: 62, type_name: "少儿" },
+//    { type_id: 63, type_name: "短剧" },
+//    { type_id: 64, type_name: "漫剧" }]
+// 子类筛选（古装/科幻/国产…）不作为独立 type_id，而是通过查询参数 class/area/lang/year 过滤。
 export const TYPE_MAP = {
-  1: "电影片",
-  2: "连续剧",
-  3: "综艺片",
-  4: "动漫片",
-  6: "动作片",
-  7: "喜剧片",
-  8: "爱情片",
-  9: "科幻片",
-  10: "恐怖片",
-  11: "剧情片",
-  12: "战争片",
-  13: "国产剧",
-  14: "香港剧",
-  15: "韩国剧",
-  16: "欧美剧",
-  20: "记录片",
-  21: "台湾剧",
-  22: "日本剧",
-  23: "海外剧",
-  24: "泰国剧",
-  25: "大陆综艺",
-  26: "港台综艺",
-  27: "日韩综艺",
-  28: "欧美综艺",
-  29: "国产动漫",
-  30: "日韩动漫",
-  31: "欧美动漫",
-  32: "港台动漫",
-  33: "海外动漫",
-  34: "伦理片",
-  36: "短剧",
+  1: "电影",
+  2: "剧集",
+  3: "综艺",
+  4: "动漫",
+  58: "直播",
+  62: "少儿",
+  63: "短剧",
+  64: "漫剧",
 };
 
-// 子分类 → 父分类（type_id → type_pid；顶级 pid=0）
-export const TYPE_PARENT = {
-  1: 0, 2: 0, 3: 0, 4: 0,
-  6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 11: 1, 12: 1, 20: 1, 34: 1,
-  13: 2, 14: 2, 15: 2, 16: 2, 21: 2, 22: 2, 23: 2, 24: 2, 36: 2,
-  25: 3, 26: 3, 27: 3, 28: 3,
-  29: 4, 30: 4, 31: 4, 32: 4, 33: 4,
-};
+// 顶级分类 id 集合（mmys.app 单级导航，全部为顶级）
+export const TOP_TYPE_IDS = new Set(Object.keys(TYPE_MAP).map(Number));
 
-// 生成分类字典（对齐 ffzy5.tv 的 class 数组结构）：
-//   • 全量返回 TYPE_MAP 中定义的所有分类（无论数据是否命中，保持与 ffzy5.tv 一致）
-//   • 每项：{ type_id, type_pid, type_name }
-//   • 顶级 type_pid=0，子类指向父类 id（电影片/连续剧/综艺片/动漫片）
+// 生成分类字典（对齐 mmys.app 官方导航结构）：
+//   • 全量返回 TYPE_MAP 中定义的所有顶级分类（无论数据是否命中，保持与官方一致）
+//   • 每项：{ type_id, type_pid: 0, type_name }
+//   • 全部 type_pid=0（mmys.app 无二级分类编号）
 export function getAllCategories(_vods) {
   return Object.entries(TYPE_MAP)
-    .map(([tid, name]) => {
-      const id = Number(tid);
-      return {
-        type_id: id,
-        type_pid: TYPE_PARENT[id] ?? 0,
-        type_name: name,
-      };
-    })
+    .map(([tid, name]) => ({
+      type_id: Number(tid),
+      type_pid: 0,
+      type_name: name,
+    }))
     .sort((a, b) => a.type_id - b.type_id);
 }
 
@@ -139,20 +111,19 @@ function toInt(v) {
   return Number.isInteger(n) ? n : null;
 }
 
-// 从 vod 提取标准分类名（优先 TYPE_MAP，兜底 vod_class 首段）
-// 返回 { type_id, type_pid, type_name } — 供 list/detail 共同使用
+// 从 vod 提取标准分类（优先 TYPE_MAP，兜底 vod_class 首段）
+// 返回 { type_id, type_name } — 供 list/detail 共同使用
+// mmys.app 单级导航，type_id_1 = type_id（详情字段兼容苹果 CMS V10 规范）
 function typeOf(vod) {
   const tid = Number(vod.type_id);
   if (Number.isInteger(tid) && tid > 0) {
     return {
       type_id: tid,
-      type_pid: TYPE_PARENT[tid] ?? 0,
       type_name: TYPE_MAP[tid] || (vod.vod_class || "").split(",")[0] || "",
     };
   }
   return {
     type_id: 0,
-    type_pid: 0,
     type_name: (vod.vod_class || "").split(",")[0] || "",
   };
 }
@@ -202,7 +173,7 @@ export function vodToDetail(vod, origin) {
   return {
     vod_id: toInt(vod.vod_id) ?? String(vod.id),
     type_id: t.type_id,
-    type_id_1: t.type_pid,
+    type_id_1: t.type_id, // mmys.app 单级导航：顶级 id = type_id
     group_id: 0,
     vod_name: vod.name || "",
     vod_sub: vod.vod_sub || "",

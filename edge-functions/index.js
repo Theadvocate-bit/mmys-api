@@ -138,7 +138,7 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
 
 <section class="card" style="margin-top:14px">
 <h3>苹果 CMS V10 完整文档</h3>
-<p style="color:var(--dim);font-size:13px;margin-bottom:12px">响应结构与 <span class="badge">hongniuzy2</span><span class="badge">bfzyapi</span><span class="badge">dyttzyapi</span> 三家采集源完全一致：list 用逗号分隔 8 字段，detail 用 <code>$$$</code> 分隔源、<code>#</code> 分隔集，每集格式 <code>集名$url</code>。</p>
+<p style="color:var(--dim);font-size:13px;margin-bottom:12px">分类字典与 <span class="badge">mmys.app</span> 官方客户端一致（8 类顶级导航）。list 用逗号分隔 8 字段，detail 用 <code>$$$</code> 分隔源、<code>#</code> 分隔集，每集格式 <code>集名$url</code>。</p>
 
 <div class="endpoint">
   <div><span class="tag t-get">GET</span> <span class="path">/api/appcms</span></div>
@@ -152,7 +152,7 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
 <tr><td class="mono">ac</td><td>string</td><td>动作。<code>detail</code> 返回详情；缺省返回 list；<code>list</code> 别名。</td></tr>
 <tr><td class="mono">page / pg</td><td>int</td><td>页码（默认 1）</td></tr>
 <tr><td class="mono">limit</td><td>int</td><td>每页数量（默认 20，最大 100）</td></tr>
-<tr><td class="mono">type_id / class_id</td><td>int</td><td>分类 id。<code>2</code>=连续剧，<code>13</code>=国产剧，<code>36</code>=短剧。留空=全部。</td></tr>
+<tr><td class="mono">type_id / class_id</td><td>int</td><td>分类 id（mmys.app 8 类）：<code>1</code>=电影，<code>2</code>=剧集，<code>3</code>=综艺，<code>4</code>=动漫，<code>58</code>=直播，<code>62</code>=少儿，<code>63</code>=短剧，<code>64</code>=漫剧。留空=全部。</td></tr>
 <tr><td class="mono">wd</td><td>string</td><td>按片名模糊搜索（不区分大小写）</td></tr>
 <tr><td class="mono">ids</td><td>string</td><td><b>仅 ac=detail 有效</b>。逗号分隔多个 vod id，例如 <code>19067,308179</code></td></tr>
 </tbody>
@@ -163,10 +163,10 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
   <span class="k">"code"</span>: <span class="n">1</span>,
   <span class="k">"msg"</span>: <span class="s">"数据列表"</span>,
   <span class="k">"page"</span>: <span class="n">1</span>, <span class="k">"pagecount"</span>: <span class="n">1</span>, <span class="k">"limit"</span>: <span class="n">20</span>, <span class="k">"total"</span>: <span class="n">3</span>,
-  <span class="k">"class"</span>: [{<span class="k">"type_id"</span>:<span class="n">2</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"连续剧"</span>},{<span class="k">"type_id"</span>:<span class="n">13</span>,<span class="k">"type_pid"</span>:<span class="n">2</span>,<span class="k">"type_name"</span>:<span class="s">"国产剧"</span>},{<span class="k">"type_id"</span>:<span class="n">36</span>,<span class="k">"type_pid"</span>:<span class="n">2</span>,<span class="k">"type_name"</span>:<span class="s">"短剧"</span>}, ...],
+  <span class="k">"class"</span>: [{<span class="k">"type_id"</span>:<span class="n">1</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"电影"</span>},{<span class="k">"type_id"</span>:<span class="n">2</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"剧集"</span>},{<span class="k">"type_id"</span>:<span class="n">3</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"综艺"</span>},{<span class="k">"type_id"</span>:<span class="n">4</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"动漫"</span>},{<span class="k">"type_id"</span>:<span class="n">58</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"直播"</span>},{<span class="k">"type_id"</span>:<span class="n">62</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"少儿"</span>},{<span class="k">"type_id"</span>:<span class="n">63</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"短剧"</span>},{<span class="k">"type_id"</span>:<span class="n">64</span>,<span class="k">"type_pid"</span>:<span class="n">0</span>,<span class="k">"type_name"</span>:<span class="s">"漫剧"</span>}],
   <span class="k">"list"</span>: [
-    <span class="c">// "id,tvod_name,tvod_img,tvod_short_intro,tvod_blurb,tvod_area,genre,vod_remarks"</span>
-    <span class="s">"19067,师兄太稳健,https://xxx/cover.jpg,简介,概述,中国,动漫,10集"</span>
+    <span class="c">// 精简 8 字段对象</span>
+    {<span class="k">"vod_id"</span>:<span class="n">19067</span>,<span class="k">"vod_name"</span>:<span class="s">"师兄太稳健"</span>,<span class="k">"type_id"</span>:<span class="n">2</span>,<span class="k">"type_name"</span>:<span class="s">"剧集"</span>,<span class="k">"vod_remarks"</span>:<span class="s">"30集全"</span>,<span class="k">"vod_play_from"</span>:<span class="s">"BBA,bytedance,youku"</span>}
   ]
 }</pre>
 
@@ -177,13 +177,13 @@ http://<span class="s">$HOST</span>/api/appcms?ac=detail&amp;ids=__FIRST_ID__</p
   <span class="k">"list"</span>: [{
     <span class="c">// 83 字段，常用几个：</span>
     <span class="k">"vod_id"</span>: <span class="n">19067</span>,
-    <span class="k">"type_id"</span>: <span class="n">13</span>, <span class="k">"type_id_1"</span>: <span class="n">2</span>, <span class="k">"type_name"</span>: <span class="s">"国产剧"</span>,
+    <span class="k">"type_id"</span>: <span class="n">2</span>, <span class="k">"type_id_1"</span>: <span class="n">2</span>, <span class="k">"type_name"</span>: <span class="s">"剧集"</span>,
     <span class="k">"vod_name"</span>: <span class="s">"师兄太稳健"</span>,
     <span class="k">"vod_area"</span>: <span class="s">"大陆"</span>,
     <span class="k">"vod_year"</span>: <span class="s">"2026"</span>,
-    <span class="k">"vod_class"</span>: <span class="s">"剧情,爱情"</span>,
-    <span class="k">"vod_remarks"</span>: <span class="s">"更新至第30集"</span>,
-    <span class="k">"vod_play_from"</span>: <span class="s">"BBA$$$GGC$$$QQS"</span>,          <span class="c">// $$$ 分隔源</span>
+    <span class="k">"vod_class"</span>: <span class="s">"奇幻,古装,电视,连续"</span>,
+    <span class="k">"vod_remarks"</span>: <span class="s">"30集全"</span>,
+    <span class="k">"vod_play_from"</span>: <span class="s">"BBA$$$bytedance$$$youku"</span>,       <span class="c">// $$$ 分隔源</span>
     <span class="k">"vod_play_server"</span>: <span class="s">"no$$$no$$$no"</span>,
     <span class="k">"vod_play_url"</span>: <span class="s">"第01集$/api/play?...$$$第01集$/api/play?...$$$..."</span>
     <span class="c">// $$$ 分隔源；# 分隔集；每集 name$url</span>

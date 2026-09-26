@@ -1,6 +1,6 @@
 // edge-functions/api/appcms.js — GET /api/appcms
-// 苹果 CMS V10 API 格式，严格对齐 ffzy5.tv 官方规范
-// （参考：https://ffzy5.tv/api.php/provide/vod）
+// 苹果 CMS V10 API 格式，严格对齐 mmys.app 官方客户端规范
+// （抓包来源：cos.hxx2023.cc/maomao.php/v7/logs → "导航列表" 响应）
 //
 // 用法:
 //   GET /api/appcms                    → 精简列表（8 字段/项）
@@ -13,12 +13,14 @@
 //
 // 响应格式：
 //   { code, msg, page, pagecount, limit, total, list, class }
-//   • class: [{type_id, type_pid, type_name}, ...] 全量 31 类（含层级）
+//   • class: [{type_id, type_pid, type_name}, ...] 全量 8 类顶级导航
+//     （1 电影 / 2 剧集 / 3 综艺 / 4 动漫 / 58 直播 / 62 少儿 / 63 短剧 / 64 漫剧）
+//     全部 type_pid=0（mmys.app 单级导航）
 //   • list 项：默认 8 字段；?ac=detail 时为完整 83 字段
-//   • 详情字段 type_id_1 = 父类 id（顶级=0；国产剧 13 → 连续剧 2）
+//   • 详情字段 type_id_1 = 顶级 id（= type_id，mmys.app 无二级分类编号）
 //   • vod_play_from 分隔：list 用 ','；detail 用 '$$$'
 //   • vod_play_url  分隔：源间 '$$$'，源内集 '#', 每集 'name$url'
-//   • vod_play_server 每源占位 "no"（与 ffzy5.tv 一致）
+//   • vod_play_server 每源占位 "no"（与 mmys.app 一致）
 
 import { getDb, getAllMovies, getMovie } from "../lib/db.js";
 import {
