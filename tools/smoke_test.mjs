@@ -406,5 +406,55 @@ assert(cms19067.vod_play_from.split("$$$").length === 10, "19067 has 10 sources 
 const youkuSlice = cms19067.vod_play_url.split("$$$")[2];
 assert(/^1\$/.test(youkuSlice), "19067 youku uses bare '1' name from HAR");
 
+// --- wd 搜索：按名称（对齐 mmys.app 官方"搜索"响应行为） ---
+console.log("AppCMS wd search (name-focused):");
+const { getAllMovies } = await import("../edge-functions/lib/db.js");
+const allVods = await getAllMovies({});
+
+// 复现 /api/appcms?wd= 的过滤逻辑（不含 vod_content，避免长文本误伤）
+function searchBy(wd) {
+  const terms = wd.toLowerCase();
+  return allVods.filter((m) => {
+    if ((m.name || "").toLowerCase().includes(terms)) return true;
+    if ((m.vod_en || "").toLowerCase().includes(terms)) return true;
+    if (String(m.vod_id) === wd || String(m.id) === wd) return true;
+    const hay = [
+      m.vod_remarks, m.vod_class, m.vod_actor, m.vod_director,
+      m.vod_area, m.vod_lang,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return hay.includes(terms);
+  });
+}
+
+// 精确片名匹配
+const hitShixiong = searchBy("师兄");
+assertEq(hitShixiong.map((m) => m.name), ["师兄太稳健"], "wd=师兄 命中片名");
+const hitFayi = searchBy("法医");
+assertEq(hitFayi.map((m) => m.name), ["法医秦明之龙番往事"], "wd=法医 命中片名");
+const hitQinming = searchBy("秦明");
+assertEq(hitQinming.map((m) => m.name), ["法医秦明之龙番往事"], "wd=秦明 命中片名片段");
+
+// 单字"爱"只应命中片名含"爱"的（为爱正名），不应被 vod_content 里"爱人如潮水"污染
+const hitAi = searchBy("爱");
+assertEq(hitAi.map((m) => m.name), ["为爱正名"], "wd=爱 仅命中片名，不被 vod_content 误伤");
+
+// 分类 / 演员 / 地区搜索
+assertEq(searchBy("奇幻").map((m) => m.name), ["师兄太稳健"], "wd=奇幻 命中 vod_class");
+assertEq(searchBy("古装").map((m) => m.name), ["师兄太稳健"], "wd=古装 命中 vod_class");
+assertEq(searchBy("悬疑").map((m) => m.name), ["法医秦明之龙番往事"], "wd=悬疑 命中 vod_class");
+
+// 按 vod_id 精确匹配（官方 wd=数字 可查）
+const hitId = searchBy("19067");
+assertEq(hitId.map((m) => m.name), ["师兄太稳健"], "wd=19067 命中 vod_id");
+const hitIdFull = searchBy("vod-19067");
+assertEq(hitIdFull.map((m) => m.name), ["师兄太稳健"], "wd=vod-19067 命中 id 全形式");
+
+// 大小写不敏感
+assertEq(searchBy("SIMING").map((m) => m.name), [], "wd=SIMING 未命中（英文无匹配）");
+assertEq(searchBy("qihuan").length, 0, "wd=qihuan 未命中（拼音不在字段中）");
+
+// 空 wd 返回全部
+assertEq(searchBy("").length, allVods.length, "wd= 空返回全部");
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -113,7 +113,7 @@ GET /api/appcms?page=&limit=&wd=&class_id=&ids=&ac=detail&text=
 |---|---|
 | `page` | 页码（默认 1） |
 | `limit` | 每页条数（默认 20） |
-| `wd` / `text` | 搜索关键字（按名称 / 简介 / 分类模糊匹配） |
+| `wd` / `text` | 搜索关键字（按片名优先，其次演员/地区/分类；不含 `vod_content` 长文本以避免单字误伤） |
 | `class_id` / `type_id` | 按分类 id 过滤（两者等价） |
 | `ids` | 按片目 id 查（单个或逗号分隔） |
 | `ac` | `list`（默认精简）/ `detail`（83 字段详情） |
@@ -207,7 +207,9 @@ curl https://<域名>/api/appcms
 curl "https://<域名>/api/appcms?ac=detail&ids=305048"
 
 # 搜索
-curl "https://<域名>/api/appcms?wd=法医"
+curl "https://<域名>/api/appcms?wd=法医"           # 按片名匹配
+curl "https://<域名>/api/appcms?wd=19067"          # 按 vod_id 精确查
+curl "https://<域名>/api/appcms?wd=奇幻"           # 按 vod_class 分类词
 
 # 按分类筛选（8 类顶级导航 id）
 curl "https://<域名>/api/appcms?type_id=2"         # 剧集

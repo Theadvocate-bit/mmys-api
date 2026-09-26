@@ -1,15 +1,22 @@
 // edge-functions/api/appcms.js — GET /api/appcms
 // 苹果 CMS V10 API 格式，严格对齐 mmys.app 官方客户端规范
-// （抓包来源：cos.hxx2023.cc/maomao.php/v7/logs → "导航列表" 响应）
+// （抓包来源：cos.hxx2023.cc/maomao.php/v7/logs → "导航列表" / "搜索" 响应）
 //
 // 用法:
 //   GET /api/appcms                    → 精简列表（8 字段/项）
 //   GET /api/appcms?page=2&limit=20    → 分页
-//   GET /api/appcms?wd=关键字          → 按名称/简介/分类搜索
+//   GET /api/appcms?wd=关键字          → 按名称/演员/地区搜索（不含 vod_content 长文本）
+//   GET /api/appcms?wd=19067           → 按 vod_id 精确查
 //   GET /api/appcms?class_id=1         → 按分类过滤（也接受 type_id=1）
 //   GET /api/appcms?ids=305048         → 按 id 查（默认返回精简列表）
 //   GET /api/appcms?ac=detail&ids=...  → 详情模式（83 字段/项）
 //   GET /api/appcms?text=xxx           → wd 的别名
+//
+// 搜索字段（对齐 mmys.app 官方"搜索"响应覆盖范围）：
+//   主：vod_name（名称）/ vod_en（拼音）
+//   辅：vod_id / vod_remarks / vod_class / vod_actor / vod_director /
+//       vod_area / vod_lang
+//   排除 vod_content（长文本，单字/短词会误伤）
 //
 // 响应格式：
 //   { code, msg, page, pagecount, limit, total, list, class }
@@ -64,18 +71,29 @@ export async function onRequest(context) {
     const origin = new URL(request.url).origin;
     const classList = getAllCategories(all);
 
-    // 搜索过滤
     let filtered = all;
+    // 搜索过滤（名称优先，对齐 mmys.app 官方 "搜索" 响应行为）
+    //   • 主字段：vod_name（名称匹配，主要意图）
+    //   • 次字段：vod_id / vod_en / vod_remarks / vod_class / vod_actor /
+    //            vod_director / vod_area / vod_lang
+    //   • 排除 vod_content（长文本会导致单字/短词误伤，如 wd=爱 匹配到含"爱人如潮水"的简介）
     if (wd) {
       const terms = wd.toLowerCase();
       filtered = filtered.filter((m) => {
+        // 主字段：名称（含 vod_en 拼音别名）
+        const name = (m.name || "").toLowerCase();
+        const en = (m.vod_en || "").toLowerCase();
+        if (name.includes(terms) || en.includes(terms)) return true;
+        // vod_id 精确匹配（"19067" 或 "vod-19067"）
+        if (String(m.vod_id) === wd || String(m.id) === wd) return true;
+        // 次字段：片名以外的元信息（不含 vod_content 长文本）
         const hay = [
-          m.name,
           m.vod_remarks,
           m.vod_class,
-          m.vod_content,
           m.vod_actor,
           m.vod_director,
+          m.vod_area,
+          m.vod_lang,
         ]
           .filter(Boolean)
           .join(" ")
