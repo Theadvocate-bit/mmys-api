@@ -12,7 +12,12 @@
 //   GET /api/appcms?ac=detail&ids=...  → 详情模式（83 字段/项）
 //   GET /api/appcms?text=xxx           → wd 的别名
 //
-// 搜索字段（对齐 mmys.app 官方"搜索"响应覆盖范围）：
+// 在线搜索（减少 Turso 依赖）：
+//   设置 env.MYS_SEARCH_UPSTREAM="http://ffzy5.tv/api.php/provide/vod"（任意苹果 CMS V10 采集源）
+//   配置后 wd 搜索会先透传到该采集源，命中即返回；失败或空结果才回落本地。
+//   本地（Turso + 内嵌）作为兜底缓存。
+//
+// 搜索字段（本地兜底策略，名称优先）：
 //   主：vod_name（名称）/ vod_en（拼音）
 //   辅：vod_id / vod_remarks / vod_class / vod_actor / vod_director /
 //       vod_area / vod_lang
@@ -29,7 +34,7 @@
 //   • vod_play_url  分隔：源间 '$$$'，源内集 '#', 每集 'name$url'
 //   • vod_play_server 每源占位 "no"（与 mmys.app 一致）
 
-import { getDb, getAllMovies, getMovie } from "../lib/db.js";
+import { getDb, getConfig, getAllMovies, getMovie } from "../lib/db.js";
 import {
   vodToListItem,
   vodToDetail,
@@ -42,6 +47,55 @@ const CORS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
+
+// ---------------------------------------------------------------------------
+// 在线上游搜索（wd 有值且配置了 MYS_SEARCH_UPSTREAM 时优先透传）
+// ---------------------------------------------------------------------------
+// 返回 { ok, data, source }：
+//   ok=false  → 上游不可用，调用方回落到本地搜索
+//   ok=true   → data 为上游 { code, msg, list, pagecount, total }，source 记录上游 URL
+//
+// 苹果 CMS V10 采集源规范：GET <upstream>?wd=xxx&page=N&limit=N 返回
+//   { code: 1, msg, page, pagecount, limit, total, list: [...], class: [...] }
+// list 项字段集与本项目列表项一致（8 字段精简格式），可直接透传。
+async function fetchFromUpstream(env, upstreamUrl, params, timeoutMs = 8000) {
+  if (!upstreamUrl) return { ok: false };
+  try {
+    const u = new URL(upstreamUrl);
+    // 透传关键参数（wd / page / limit / class_id / ids / ac）
+    for (const k of ["wd", "page", "limit", "class_id", "type_id", "ids", "ac", "text"]) {
+      const v = params.get(k);
+      if (v !== null) u.searchParams.set(k, v);
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(u.toString(), {
+      method: "GET",
+      signal: ctrl.signal,
+      headers: { "User-Agent": "mmys-api/0.4", "Accept": "application/json" },
+    });
+    clearTimeout(t);
+    if (!res.ok) return { ok: false };
+    const j = await res.json();
+    if (!j || !Array.isArray(j.list)) return { ok: false };
+    if (j.list.length === 0) return { ok: false }; // 空结果也回落本地
+    return {
+      ok: true,
+      data: {
+        code: 1,
+        msg: "数据列表",
+        page: j.page || 1,
+        pagecount: j.pagecount || 1,
+        limit: j.limit || params.get("limit") || "20",
+        total: j.total || j.list.length,
+        list: j.list,
+        upstream: u.toString(),
+      },
+    };
+  } catch {
+    return { ok: false };
+  }
+}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -67,8 +121,35 @@ export async function onRequest(context) {
   const wantDetail = ac === "detail";
 
   try {
-    const all = await getAllMovies(env);
     const origin = new URL(request.url).origin;
+
+    // ---- 在线搜索优先：wd 有值 + 配置了 upstream + 非详情模式 ----
+    // 详情模式走本地（本地有 vod_play_url 播放链接，upstream 通常无）
+    if (wd && !wantDetail) {
+      const cfg = getConfig(env);
+      if (cfg.searchUpstream) {
+        const up = await fetchFromUpstream(env, cfg.searchUpstream, q);
+        if (up.ok) {
+          // 用本项目的 class 数组替换 upstream 的（保持 8 类顶级导航）
+          const all = await getAllMovies(env);
+          const classList = getAllCategories(all);
+          return json({
+            code: 1,
+            msg: "数据列表",
+            page: up.data.page,
+            pagecount: up.data.pagecount,
+            limit: Number(up.data.limit) || limit,
+            total: up.data.total,
+            list: up.data.list,
+            class: classList,
+            upstream: up.data.upstream,
+          });
+        }
+        // 上游失败/空结果 → 继续走本地搜索
+      }
+    }
+
+    const all = await getAllMovies(env);
     const classList = getAllCategories(all);
 
     let filtered = all;

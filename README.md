@@ -40,6 +40,23 @@ curl -X POST https://<部署域名>/api/add-movie -d @detail.json
 node tools/smoke_test.mjs
 ```
 
+### 在线搜索（减少 Turso 依赖）
+
+配置 `MYS_SEARCH_UPSTREAM` 环境变量指向任意**苹果 CMS V10 采集源**，`wd` 搜索会优先透传，本地作为兜底。
+
+```bash
+# 任选一个苹果 CMS V10 采集源
+export MYS_SEARCH_UPSTREAM="http://ffzy5.tv/api.php/provide/vod"
+```
+
+**行为**：
+- `wd=xxx` + 非 detail 模式 → 先透传到上游；上游返回空/失败 → 回落本地（Turso + 内嵌）
+- 详情模式（`ac=detail`）→ 直接走本地（本地有 `vod_play_url` 播放链接，上游通常无）
+- 列表/分类浏览（无 `wd`）→ 直接走本地（这是你的片库）
+- 超时 8s（可通过 `MYS_PARSE_TIMEOUT` 调整）
+
+**注意**：上游返回的 `type_id` 是上游自己的编号（如 ffzy5.tv 用 30=日韩动漫），与 mmys.app 8 类不一致。需要 mmys.app 一致 type_id 时，配置一个 mmys.app 采集源。
+
 ## 🚀 部署（EdgeOne Makers 三选一）
 
 ### 方式 A：CLI 直传

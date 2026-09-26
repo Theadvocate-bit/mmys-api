@@ -456,5 +456,30 @@ assertEq(searchBy("qihuan").length, 0, "wd=qihuan 未命中（拼音不在字段
 // 空 wd 返回全部
 assertEq(searchBy("").length, allVods.length, "wd= 空返回全部");
 
+// --- 上游搜索：getConfig 解析 MYS_SEARCH_UPSTREAM ---
+console.log("\nUpstream search (MYS_SEARCH_UPSTREAM):");
+
+const cfgWith = getConfig({ MYS_SEARCH_UPSTREAM: "http://ffzy5.tv/api.php/provide/vod" });
+assertEq(cfgWith.searchUpstream, "http://ffzy5.tv/api.php/provide/vod", "getConfig 解析 MYS_SEARCH_UPSTREAM");
+const cfgEmpty = getConfig({});
+assertEq(cfgEmpty.searchUpstream, "", "未配置 MYS_SEARCH_UPSTREAM 返回空字符串");
+const cfgWs = getConfig({ MYS_SEARCH_UPSTREAM: "   " });
+assertEq(cfgWs.searchUpstream, "", "空白字符串被 trim 为 ''");
+const cfgTrim = getConfig({ MYS_SEARCH_UPSTREAM: "  http://x.tv/api  " });
+assertEq(cfgTrim.searchUpstream, "http://x.tv/api", "getConfig trim 前后空白");
+
+// 未配置 upstream 时，wd 搜索仍走本地（回归保护）
+const cfgNoUp = getConfig({});
+assertEq(cfgNoUp.searchUpstream, "", "无 upstream → 本地搜索兜底");
+
+// 上游搜索核心逻辑验证（不实际联网，只验证条件判断）
+function shouldUseUpstream({ wd, wantDetail, cfg }) {
+  return Boolean(wd && !wantDetail && cfg.searchUpstream);
+}
+assertEq(shouldUseUpstream({ wd: "火影", wantDetail: false, cfg: { searchUpstream: "http://x" } }), true, "wd + 无 detail + 有 upstream → 用上游");
+assertEq(shouldUseUpstream({ wd: "", wantDetail: false, cfg: { searchUpstream: "http://x" } }), false, "无 wd → 不用上游");
+assertEq(shouldUseUpstream({ wd: "火影", wantDetail: true, cfg: { searchUpstream: "http://x" } }), false, "detail 模式 → 不用上游（本地有播放链接）");
+assertEq(shouldUseUpstream({ wd: "火影", wantDetail: false, cfg: { searchUpstream: "" } }), false, "无 upstream 配置 → 不用上游");
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

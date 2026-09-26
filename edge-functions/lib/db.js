@@ -33,6 +33,9 @@ export function getConfig(env) {
     cacheTtl: parseInt(env.MYS_CACHE_TTL || "1800", 10), // seconds
     uaApp: env.MYS_UA_APP || "Dart/3.13 (dart:io)",
     uaPlayer: env.MYS_UA_PLAYER || "dart",
+    // 苹果 CMS V10 采集源 URL（wd 搜索时优先透传，例如 http://ffzy5.tv/api.php/provide/vod）
+    // 空字符串 = 禁用在线搜索，仅查本地（Turso + 内嵌）
+    searchUpstream: (env.MYS_SEARCH_UPSTREAM || "").trim(),
   };
 }
 
