@@ -251,6 +251,187 @@ mmt.php 的加密密钥**不在响应中直接给出**，需：
 
 ---
 
+## Step 1 记录：本地存储扫描（2026-09-26）
+
+**目标**：在 APK 静态资源里找客户端持久化/硬编码的 AES 密钥。
+
+**检查项**：
+
+| 检查 | 结果 |
+|---|---|
+| Java 层硬编码 32-char hex | 0 命中 |
+| Java 层硬编码 16-byte ASCII key | 0 命中（Flutter SDK/第三方库除外） |
+| SharedPreferences 调用点（业务层） | 0 命中（仅 Flutter 标准插件） |
+| Java 层 `KEY|SECRET|PWD|PASSWORD` 常量 | 0 命中（业务层） |
+| Flutter assets/*.config 明文密钥 | 0 命中（唯一 config 已加密） |
+| supplierconfig.json | 只有厂商 appid，无密钥 |
+
+**发现的加密资源**：
+- `assets/flutter_assets/assets/6dc8be097856bd70.config`（2.5MB）— 二进制加密配置文件
+  - `strings` 扫描仅 30646 条字符串，绝大部分是乱码
+  - 唯一相关的字符串命中：`k192`（可能是 `appsecretkey192` 片段）
+  - 文件内容看似随机字节（`9aa9 185a ac72 8b71...`），熵极高
+  - 可能是服务器下发的加密配置包，包含密钥+其他配置
+
+**结论**：
+- 密钥**不在 APK 明文静态资源里**
+- 唯一可能是加密的 6dc8be097856bd70.config 中包含密钥
+- 需要动态分析（Frida）或反汇编 libapp.so 定位密钥获取逻辑
+
+**下一步**：走 Step 2（试同套密钥解密 mmt.php）或 Step 4（装 radare2 反汇编 libapp.so）
+
+---
+
+## Step 2 记录：s.a.a() 复刻解密 mmt.php（2026-09-26）
+
+**目标**：用 Java 层 `s.a.a()` 的完整逻辑，配合候选密钥/IV 解密 mmt.php 256B 密文。
+
+**测试规模**：
+
+| 类别 | 数量 |
+|---|---|
+| key_hex 候选（含 MD5/SHA256 派生、APK 签名派生、常量字符串） | 25 |
+| IV 候选（zero / ct[:16] / key-name UTF-8 / hex 变体） | 6 |
+| PBKDF2 派生（seed × salt × iter） | 12 seed × 5 salt × 3 iter = 180 |
+| **合计** | **~330 组合** |
+
+**结果**：**0 命中有效 PKCS7 padding**，无一产生可读明文。
+
+**关键结论**：
+
+1. **mmt.php 密文**与 `s.a.a()` 使用的密钥**不同源**
+   - 或加密算法不是标准 AES-128-CBC（可能是自定义变体）
+   - 或密钥不在能静态推导的地方
+
+2. **key-name 不是密钥本身**
+   - `xddappsecretkey192` 只是标识/索引
+   - MD5(key-name)、SHA256(key-name)、UTF-8(key-name) 全部不是有效 AES-128 密钥
+   - PBKDF2 派生（1/1000/10000 iter）也未命中
+
+3. **APK 签名派生**（`META-INF/*.RSA`/`.SF` MD5/SHA256）也未命中
+
+4. **响应体结构再确认**（entry 51/53/54）：
+   - body 是 base64，解码后含三段：`0x hex 数值` | `binary 加密 blob` | `key-name`
+   - 例 entry 54（2856 chars）→ 解码 155B：hex 数据 155 chars + key-name `xddappsecretkey208`
+   - entry 53（676 chars）→ 解码 488B：hex + 332B blob + key-name
+   - key-name 段（base64 编码）在 body 尾部
+
+**结论**：
+- 静态分析路线**已用尽**：APK 静态资源 + HAR + 常见派生方式都试过了
+- 密钥要么在运行时生成（Dart 代码），要么在动态下发的加密 config 里
+- **继续逆向必须走动态或反汇编路线**
+
+**最终结论（2026-09-26 Step 2 结束）**：
+- 静态分析路线**已完全走尽**（330+ 组合 + 最后一轮激进尝试 ~1000 组合，均 0 命中）
+- 密钥**不在能静态推导的地方**：
+  - 不在 APK 明文资源
+  - 不在 HAR 明文
+  - 不是 key-name 的直接变形/派生
+  - 不是常见密码/PBKDF2/APK 签名派生
+- **必须换路线**
+
+**下一步决策（用户选择）**：
+
+| 选项 | 说明 | 难度 |
+|---|---|---|
+| **A. 放弃 mmt.php** | 只走 Ace/BBA/ETH 明文源，直接可用 | 快，功能受限 |
+| **B. 装 radare2 反汇编** | `apt install radare2` 反汇编 libapp.so 找 Dart 密钥常量 | 需管理员 + 数小时 |
+| **C. Frida 动态调试** | Android 环境 + Frida hook 抓运行时密钥 | 需 Android 设备/模拟器 |
+| **D. 尝试解 config.bin** | 2.5MB 加密配置可能含密钥，但自身加密方式未知 | 未知，可能走不通 |
+| **E. 只保留逆向成果文档** | 归档现有发现，不再继续 | 已完成 |
+
+---
+
+## Step C 记录：尝试解 config.bin（2026-09-26）
+
+**目标**：破解 `assets/flutter_assets/assets/6dc8be097856bd70.config`（2.5MB），看是否含密钥。
+
+**文件特征**：
+
+| 属性 | 值 |
+|---|---|
+| 大小 | 2,493,066 bytes |
+| size mod 16 | 10 |
+| 熵 | **7.9999 bits/byte**（近乎完美满熵） |
+| 唯一字节 | 256/256 |
+| 长 base64 序列 | 0 |
+| Dart kernel magic (kBDF) | 不匹配 |
+| Dart snapshot magic (BCDM) | 不匹配 |
+| zlib/gzip/zstd magic | 不匹配 |
+
+**结论：满熵加密数据**，可能是 AES-256/ChaCha20 等强加密，非简单 XOR。
+
+**尝试方案（全部 0 命中）**：
+
+| 尝试 | 数量 | 结果 |
+|---|---|---|
+| 单字节 XOR 扫描 | 256 keys | 最高可读比例 0.413（0x7b） |
+| 10 字节循环 XOR（含 filename MD5/SHA1/SHA256 派生） | 7 seeds | 最高可读比例 0.440 |
+| XOR with 前缀假设（appsecretkey192 / xdd / { JSON / MaomaoAppConfig / 等） | 12 前缀 | 全 <0.45 |
+| 56 个 libapp.so 中的 32-char hex 作为密钥解 mmt.php | 55 keys × 3 IV | 0 命中 |
+
+**关键发现**：`libapp.so` 的 strings 中确实包含 56 个 32-char hex 字符串，但**无一能解密 mmt.php**，且这些 hex 更可能是 Dart VM 内部常量（哈希表种子、SHA-256 K 常量等），不是应用密钥。
+
+**结论**：
+- config.bin **不是简单 XOR 加密**（若是 XOR 早就找到了）
+- 可能是 AES-CTR/GCM 或 ChaCha20 强加密
+- 没有密钥就无法解
+- **Step C 走不通**
+
+**下一步**：转向 **Step A**（放弃 mmt.php，只走 Ace/BBA 明文源）
+
+---
+
+## Step A 记录：走明文源 + 加密源友好提示（2026-09-26）
+
+**目标**：让项目直接可用（BBA/Ace/IMDB/qsvip/seven 等明文源），加密源（Ksvideo/Dong → mmt.php）返回清晰错误。
+
+**修改**：`edge-functions/api/play.js` 新增 `isEncryptedResponse()` 检测
+
+**判断规则**：
+1. 非 JSON 结构（不以 `{` 或 `[` 开头）
+2. 纯 base64 字符（含 URL-safe 变体 `A-Za-z0-9+/=_-`）
+3. 长度 100-500 chars
+4. 长度接近 4 的倍数（base64 特性）
+5. 无 URL 特征（不含 `://` / `.` / `#`）
+
+**测试验证**：
+```
+mmt cipher      → true    ✓（344 chars base64）
+json response   → false   ✓（"{\"code\":1,...")
+empty           → false   ✓
+direct url      → false   ✓（"https://..."）
+```
+
+**返回格式**（加密源被命中时）：
+```json
+{
+  "movie": "308179",
+  "source": "Ksvideo",
+  "episode": 1,
+  "error": "encrypted_source",
+  "msg": "源 'Ksvideo' 使用客户端加密（mmt.php），当前无法解密。请切换到其他源（BBA/Ace/IMDB/qsvip 等）。",
+  "hint": "该源需逆向 mmys.app 客户端 AES-128 密钥，见 HANDOFF.md"
+}
+```
+
+**Git 提交**：`992a820 feat(play): 加密源响应检测与友好错误提示`
+
+**当前项目状态**：
+- ✅ BBA 源：可用（bt.php → JSON）
+- ✅ Ace 源：可用（ace.php → JSON）
+- ✅ IMDB/qsvip/qingshan 源：可用（xd.php → JSON）
+- ✅ bytedance 源：可用（mtbytedance.php → JSON）
+- ✅ mgtv/qq/youku/qiyi 源：可用（gf2.php → JSON）
+- ✅ seven 源：可用（za.php → JSON）
+- ⚠️ Ksvideo 源：加密，返回清晰错误（原 mmt.php → base64 密文）
+
+**未测试**：项目未部署到 EdgeOne Pages，无法实测 `/api/play?source=Ksvideo` 端点。本地 Node.js 单测通过。
+
+**下一步**：进入 Step B（装 radare2 反汇编 libapp.so）
+
+---
+
 ## 变更记录
 
 | 日期 | 变更 | 操作者 |
@@ -261,6 +442,10 @@ mmt.php 的加密密钥**不在响应中直接给出**，需：
 | 2026-09-26 | **jadx 反编译完成**，定位 s.a.a() = AES-128-CBC 核心 | Gloria |
 | 2026-09-26 | 发现响应尾部 key-name 机制：`xddappsecretkey168/192/208/232` | Gloria |
 | 2026-09-26 | mmt.php 256B 密文结构分析完成，密钥未破解 | Gloria |
+| 2026-09-26 | Step 1: 扫描 APK 本地存储/硬编码密钥，0 命中；发现唯一加密 config.bin | Gloria |
+| 2026-09-26 | Step 2: s.a.a() 复刻 + 330 组密钥候选试解密 mmt.php，0 命中；静态路线走尽 | Gloria |
+| 2026-09-26 | Step C: 尝试解 config.bin（满熵加密，非简单 XOR），55 个 libapp.so hex 密钥候选全部 0 命中 | Gloria |
+| 2026-09-26 | Step A: play.js 新增 isEncryptedResponse 检测，加密源返回友好错误；BBA/Ace/IMDB 等 6 类明文源可用 | Gloria |
 
 ---
 
