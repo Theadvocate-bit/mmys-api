@@ -13,15 +13,19 @@
 //   GET /api/appcms?text=xxx           → wd 的别名
 //
 // 在线数据源（减少 Turso 依赖）：
-//   设置 env.MYS_SEARCH_UPSTREAM="http://ffzy5.tv/api.php/provide/vod"（任意苹果 CMS V10 采集源）
-//   配置后**全部请求**（列表 / 搜索 / 详情）优先透传到上游；
-//   上游失败/空结果 → 静默回落本地（Turso + 内嵌）。
-//   未配置 → 完全走本地。
+//   订阅系统：base58 编码的 JSON 配置，包含 18 个苹果 CMS V10 采集源
+//   默认订阅：https://text.nalinali.qzz.io/api/get?key=moontvsub
+//   默认源：mmys（猫猫影视，mmys.app 兼容 8 类导航）
 //
-// 播放链接差异：
-//   上游详情返回上游自己的 vod_play_url（如 ffzy5.tv 的 vip.ffzy-play10.com/share/...）
-//   本地详情返回自己的 /api/play 直连（parse_api 解析的新鲜直链）
-//   完全线上模式下用户会拿到上游播放链接。
+// 环境变量：
+//   MYS_SUBSCRIPTION_URL  订阅链接（默认 https://text.nalinali.qzz.io/api/get?key=moontvsub）
+//   MYS_DEFAULT_SOURCE    默认采集源 key（默认 mmys）
+//   MYS_SEARCH_UPSTREAM   直接指定上游 URL（覆盖订阅配置）
+//
+// 行为：
+//   获取上游 URL → 透传全部请求 → 失败/空结果回落本地
+//   播放链接差异：上游详情返回上游自己的 vod_play_url（需二次解析）
+//   type_id 差异：上游返回上游自己的编号，class 数组保持 mmys.app 8 类
 //
 // 搜索字段（本地兜底策略，名称优先）：
 //   主：vod_name（名称）/ vod_en（拼音）
@@ -40,7 +44,7 @@
 //   • vod_play_url  分隔：源间 '$$$'，源内集 '#', 每集 'name$url'
 //   • vod_play_server 每源占位 "no"（与 mmys.app 一致）
 
-import { getDb, getConfig, getAllMovies, getMovie } from "../lib/db.js";
+import { getDb, getConfig, getAllMovies, getMovie, getUpstreamUrl } from "../lib/db.js";
 import {
   vodToListItem,
   vodToDetail,
@@ -129,13 +133,13 @@ export async function onRequest(context) {
   try {
     const origin = new URL(request.url).origin;
 
-    // ---- 在线数据源优先：配置了 MYS_SEARCH_UPSTREAM → 全部请求透传 ----
+    // ---- 在线数据源优先：获取上游 URL（订阅配置或环境变量）----
     // 透传 wd / ac / ids / class_id / page / limit 等所有参数。
     // 上游失败/空结果 → 静默回落本地。
     {
-      const cfg = getConfig(env);
-      if (cfg.searchUpstream) {
-        const up = await fetchFromUpstream(env, cfg.searchUpstream, q);
+      const upstreamUrl = await getUpstreamUrl(env);
+      if (upstreamUrl) {
+        const up = await fetchFromUpstream(env, upstreamUrl, q);
         if (up.ok) {
           // class 数组保持本项目的 mmys.app 8 类导航（不采用上游的 31 类）
           const all = await getAllMovies(env);

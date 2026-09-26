@@ -456,32 +456,43 @@ assertEq(searchBy("qihuan").length, 0, "wd=qihuan 未命中（拼音不在字段
 // 空 wd 返回全部
 assertEq(searchBy("").length, allVods.length, "wd= 空返回全部");
 
-// --- 上游搜索：getConfig 解析 MYS_SEARCH_UPSTREAM ---
-console.log("\nUpstream search (MYS_SEARCH_UPSTREAM):");
+// --- 订阅系统：getConfig + 上游获取 ---
+console.log("\nSubscription system:");
+const { getUpstreamUrl, fetchSubscription } = await import("../edge-functions/lib/db.js");
 
-const cfgWith = getConfig({ MYS_SEARCH_UPSTREAM: "http://ffzy5.tv/api.php/provide/vod" });
-assertEq(cfgWith.searchUpstream, "http://ffzy5.tv/api.php/provide/vod", "getConfig 解析 MYS_SEARCH_UPSTREAM");
-const cfgEmpty = getConfig({});
-assertEq(cfgEmpty.searchUpstream, "", "未配置 MYS_SEARCH_UPSTREAM 返回空字符串");
-const cfgWs = getConfig({ MYS_SEARCH_UPSTREAM: "   " });
-assertEq(cfgWs.searchUpstream, "", "空白字符串被 trim 为 ''");
-const cfgTrim = getConfig({ MYS_SEARCH_UPSTREAM: "  http://x.tv/api  " });
-assertEq(cfgTrim.searchUpstream, "http://x.tv/api", "getConfig trim 前后空白");
+// getConfig 解析订阅配置
+const cfgDefault = getConfig({});
+assertEq(cfgDefault.subscriptionUrl, "https://text.nalinali.qzz.io/api/get?key=moontvsub", "默认订阅 URL");
+assertEq(cfgDefault.defaultSource, "mmys", "默认采集源");
+assertEq(cfgDefault.searchUpstream, "", "searchUpstream 空");
 
-// 未配置 upstream 时，wd 搜索仍走本地（回归保护）
-const cfgNoUp = getConfig({});
-assertEq(cfgNoUp.searchUpstream, "", "无 upstream → 本地搜索兜底");
+const cfgCustom = getConfig({ MYS_SUBSCRIPTION_URL: "https://custom.example.com/sub", MYS_DEFAULT_SOURCE: "ffzy" });
+assertEq(cfgCustom.subscriptionUrl, "https://custom.example.com/sub", "自定义订阅 URL");
+assertEq(cfgCustom.defaultSource, "ffzy", "自定义采集源");
 
-// 上游搜索核心逻辑验证（不实际联网，只验证条件判断）
-// 新行为：配置了 upstream 就透传（列表/搜索/详情全部），不再区分 wd 或 detail
-function shouldUseUpstream({ cfg }) {
-  return Boolean(cfg.searchUpstream);
-}
-assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream → 透传（全部请求）");
-assertEq(shouldUseUpstream({ cfg: { searchUpstream: "" } }), false, "无 upstream → 本地");
-assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream + 有 wd → 透传");
-assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream + detail → 透传（拿上游播放链接）");
-assertEq(shouldUseUpstream({ cfg: { searchUpstream: "http://x" } }), true, "有 upstream + 无 wd 列表 → 透传");
+const cfgDirect = getConfig({ MYS_SEARCH_UPSTREAM: "http://ffzy5.tv/api.php/provide/vod" });
+assertEq(cfgDirect.searchUpstream, "http://ffzy5.tv/api.php/provide/vod", "直接指定上游");
+
+// getUpstreamUrl 优先级测试
+// 1. searchUpstream 优先
+const url1 = await getUpstreamUrl({ MYS_SEARCH_UPSTREAM: "http://direct.example.com/api" });
+assertEq(url1, "http://direct.example.com/api", "searchUpstream 优先");
+
+// 2. 订阅配置（网络可能不可用，使用本地默认）
+const url2 = await getUpstreamUrl({});
+assert(url2 !== null, "订阅配置返回上游 URL");
+assert(url2.startsWith("https://"), "默认上游 URL 以 https:// 开头");
+
+// 3. 无配置返回本地默认（fallback）
+const url3 = await getUpstreamUrl({ MYS_SUBSCRIPTION_URL: "", MYS_SEARCH_UPSTREAM: "" });
+assert(url3 !== null, "无配置返回本地默认上游");
+assert(url3.startsWith("https://"), "本地默认上游 URL 有效");
+
+// fetchSubscription 返回默认配置
+const sub = await fetchSubscription({ MYS_SUBSCRIPTION_URL: "" });
+assert(sub !== null, "fetchSubscription 返回配置");
+assert(sub.apiSite !== null, "订阅配置包含 apiSite");
+assert(Object.keys(sub.apiSite).length > 0, "订阅配置有多个采集源");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);
