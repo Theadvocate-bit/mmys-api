@@ -94,24 +94,46 @@
 
 ### mmt.php 源问题
 
-`mmt.php` 返回的是 base64 编码的密文（1368 字节），不是 JSON。这可能是：
-- MMT 格式播放数据（需客户端解析）
-- 加密的 m3u8 直链（需解密）
+`mmt.php` 返回 base64 编码的加密数据（256 字节），不是 JSON 或明文 URL。
 
-**待办**：分析 mmt.php 响应格式，确定是否需要解密。
+**分析**：
+- Base64 解码后：256 字节二进制数据
+- 熵值：7.23 bits/byte（接近最大 8.0，高度随机）
+- 唯一字节：168/256
+- 无 URL 模式（无 http/https/.mp4/.m3u8/.ts）
 
-### 测试命令
+**结论**：这是加密的播放数据，疑似 AES-128-CBC 或类似对称加密。密钥可能在：
+- mmys.app 客户端硬编码
+- 运行时从服务端获取
+- 设备绑定生成
 
-```bash
-# Ace 源（JSON 响应）
-curl "http://202.189.6.83:12991/xx/ace.php?url=Ace_Top-bd803f9a53b6907d83e6dd8bf3716bb50e0ab52c55bc696b9d26f433"
+**待办**：需逆向 mmys.app 或 mmt.php 服务端获取解密密钥。
 
-# BBA 源（JSON 响应）
-curl "http://202.189.6.83:12991/xx/bt.php?url=BBA-xxx"
+### 在线数据源（commit `f988c2c`）
 
-# Ksvideo 源（base64 密文响应）
-curl "http://202.189.6.83:12991/xx/mmt.php?url=Ksvideo-xxx"
-```
+内置 16 个苹果 CMS V10 采集源，开箱即用：
+
+| Key | 名称 | API |
+|-----|------|-----|
+| mmys | 猫猫影视 | https://mmys.nalinali.qzz.io/api/appcms |
+| ffzy | 非凡影视 | http://ffzy5.tv/api.php/provide/vod |
+| dyttzy | 电影天堂资源 | http://caiji.dyttzyapi.com/api.php/provide/vod |
+| ruyi | 如意资源 | http://cj.rycjapi.com/api.php/provide/vod |
+| bfzy | 暴风资源 | https://bfzyapi.com/api.php/provide/vod |
+| zy360 | 360资源 | https://360zy.com/api.php/provide/vod |
+| jisu | 极速资源 | https://jszyapi.com/api.php/provide/vod |
+| mdzy | 魔都资源 | https://www.mdzyapi.com/api.php/provide/vod |
+| zuid | 最大资源 | https://api.zuidapi.com/api.php/provide/vod |
+| ikun | iKun资源 | https://ikunzyapi.com/api.php/provide/vod |
+| lzi | 量子资源站 | https://cj.lziapi.com/api.php/provide/vod |
+| hhzy | 豪华资源 | https://hhzyapi.com/api.php/provide/vod |
+| lzcj | 量子采集 | https://cj.lzcaiji.com/api.php/provide/vod |
+| hongniu | 红牛资源 | https://www.hongniuzy2.com/api.php/provide/vod |
+| fangzy | 非凡采集 | https://api.ffzyapi.com/api.php/provide/vod |
+
+- 默认源：`mmys`（猫猫影视，mmys.app 兼容 8 类导航）
+- 可选：`MYS_SEARCH_UPSTREAM` 环境变量覆盖内置源
+- 透传全部请求到上游，失败静默回落本地
 
 ---
 
