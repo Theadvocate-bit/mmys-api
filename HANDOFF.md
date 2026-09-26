@@ -432,6 +432,64 @@ direct url      → false   ✓（"https://..."）
 
 ---
 
+## Step B 记录：radare2 反汇编 libapp.so（2026-09-26）
+
+**目标**：反汇编 libapp.so（ARM64 Dart AOT）定位 AES 密钥常量。
+
+**安装过程**：
+- apt 源无 radare2（Debian 12 bookworm）
+- 从 GitHub 下载源码 6.2.2 tar.xz（43.9MB）
+- `./configure && make -j4` 编译成功
+- 二进制在 `/tmp/radare2-6.2.2/binr/radare2/radare2`
+- 需要 `LD_LIBRARY_PATH=/tmp/r2lib` 指向软链接目录
+
+**libapp.so 关键结构**：
+
+| 符号 | 地址 | 大小 | 说明 |
+|---|---|---|---|
+| `_kDartSnapshotText` | 0x200000 | 5,837,904B | **Dart 代码文本**（.text 段） |
+| `_kDartSnapshotData` | 0x2c0 | 2,091,664B | Dart 数据段（之前提取为 dart_snapshot.bin） |
+| `_kDartSnapshotBuildId` | 0x1c8 | 32B | 构建 ID |
+
+**总导出符号：仅 3 个**（Dart AOT 无符号表）
+
+**strings 提取结果**：
+- 10550 条 >=8 chars 的 ASCII 字符串
+- **Dart VM 内部字符串**（`_Nca@207149678`, `_hX@601515283` 等混淆标识符）
+- **pointycastle 加密库错误消息**：`AESMode.`, `ENCRYPTED_SIZE`, `decryption error`, `invalid parameters passed to AEADBlockCipher`, `SecretKeyData(...)`
+- **Dart/Flutter SDK 内部**：`devicePixelRatio`, `Canvas::drawPath`, `IsolateSpawnException.` 等
+
+**关键发现**：
+- **`SecretKeyData(...)` @ 0x33a46**：pointycastle 库的加密类
+- **`secretKeyData` @ 0x56f53**：对应方法名
+- 附近字符串是 Dart 类名/方法名，**不是密钥值**
+
+**16-char 精确长度字符串扫描**：439 条，**全部是 Dart VM/SDK 内部标识符**（`devicePixelRatio`, `_Closure@0150898`, `Path::arcToPoint` 等），无应用密钥。
+
+**Dart AOT 密钥问题**：
+- Dart AOT 编译后的字符串常量使用**特殊编码**（长度前缀 + 类型标记）
+- `strings` 无法提取 Dart 应用代码的字面量
+- 密钥要么：
+  1. 被优化成机器码常量（LDR 立即数）
+  2. 存在于 Dart 常量表（需特殊解析器）
+  3. 运行时从服务器下发
+  4. 存于本地 SharedPreferences
+
+**尝试方案**：
+- radare2 打开（无分析）：3 个符号，无其他可用信息
+- radare2 -A 分析：超时（8MB ARM64，2-3 分钟不够）
+- Ghidra 下载尝试：网络可用，但 300MB+，安装配置复杂
+- 手动 strings 扫描：无应用密钥命中
+
+**结论**：
+- libapp.so 是 Dart AOT 快照，字符串常量不可读
+- radare2 分析超时，Ghidra 过重
+- **Step B 静态反汇编路线走不通**
+
+**下一步**：进入 Step E（Frida 动态调试，需 Android 环境）
+
+---
+
 ## 变更记录
 
 | 日期 | 变更 | 操作者 |
@@ -446,6 +504,7 @@ direct url      → false   ✓（"https://..."）
 | 2026-09-26 | Step 2: s.a.a() 复刻 + 330 组密钥候选试解密 mmt.php，0 命中；静态路线走尽 | Gloria |
 | 2026-09-26 | Step C: 尝试解 config.bin（满熵加密，非简单 XOR），55 个 libapp.so hex 密钥候选全部 0 命中 | Gloria |
 | 2026-09-26 | Step A: play.js 新增 isEncryptedResponse 检测，加密源返回友好错误；BBA/Ace/IMDB 等 6 类明文源可用 | Gloria |
+| 2026-09-26 | Step B: 安装 radare2 6.2.2 反汇编 libapp.so，3 个符号无密钥；Dart AOT 常量不可读；分析超时；路线走不通 | Gloria |
 
 ---
 
