@@ -114,6 +114,21 @@ export async function onRequest(context) {
         const buf = new Uint8Array(await resp.arrayBuffer());
         const decoded = await decompressIfGzip(buf);
         const body = decodeUtf8(decoded);
+
+        // 检测加密响应（mmt.php 返回 base64 密文，非 JSON）
+        // 判断依据：长度接近 256 字节、base64 编码、无 JSON 结构
+        if (isEncryptedResponse(body)) {
+          const parseEndpoint = source.parse_api.split("/").pop() || source.parse_api;
+          return json({
+            movie: movieId,
+            source: sourceCode,
+            episode,
+            error: "encrypted_source",
+            msg: `源 '${sourceCode}' 使用客户端加密（${parseEndpoint}），当前无法解密。请切换到其他源（BBA/Ace/IMDB/qsvip 等）。`,
+            hint: "该源需逆向 mmys.app 客户端 AES-128 密钥，见 HANDOFF.md",
+          }, 502);
+        }
+
         result = safeJsonParse(body);
       } finally {
         clearTimeout(t);
@@ -203,4 +218,23 @@ function json(obj, status = 200) {
       ...CORS,
     },
   });
+}
+
+// 判断 parse_api 响应是否是加密的 base64 密文（非 JSON）
+// 特征：长度接近 AES 块数（128/160/240/256/272/320 chars base64）、纯 base64 字符
+function isEncryptedResponse(body) {
+  if (!body) return false;
+  const trimmed = body.trim();
+  // 明显的 JSON 直接排除
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+  // 纯 base64 字符（含 URL-safe 变体）
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(trimmed)) return false;
+  // 长度范围（base64 编码后：128-384 chars 对应常见 AES 密文）
+  if (trimmed.length < 100 || trimmed.length > 500) return false;
+  // 长度是 4 的倍数（base64 特性）或接近
+  const len = trimmed.length;
+  if (len % 4 > 2) return false;
+  // 排除常见 token/URL（含 - 和 _ 但不像 URL）
+  if (trimmed.includes("://") || trimmed.includes(".") || trimmed.includes("#")) return false;
+  return true;
 }
